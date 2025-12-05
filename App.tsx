@@ -1,11 +1,11 @@
 /**
  * Componente principal - App móvil para CLIENTES con estilos ARJA ERP
+ * OAuth de Google para identificar automáticamente el negocio
  */
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -13,9 +13,19 @@ import {
   ScrollView,
   Platform,
   StatusBar,
-  KeyboardAvoidingView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
+
+// Cerrar el navegador después de la autenticación
+WebBrowser.maybeCompleteAuthSession();
+
+// Obtener el redirect URI para OAuth (deep link)
+const getRedirectUri = () => {
+  return Linking.createURL('/oauth/callback');
+};
 
 const API_BASE_URL = 'https://backend-production-1042.up.railway.app';
 
@@ -23,280 +33,217 @@ const API_BASE_URL = 'https://backend-production-1042.up.railway.app';
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
 
-// Pantalla de identificación para CLIENTES
+// Pantalla de login para CLIENTES con OAuth
 function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void }) {
-  const [step, setStep] = useState<'tenant' | 'identify'>('tenant');
   const [loading, setLoading] = useState(false);
-  
-  // Datos del tenant (negocio)
-  const [tenantId, setTenantId] = useState<string>('');
-  const [tenantName, setTenantName] = useState<string>('');
-  
-  // Datos de identificación del cliente
-  const [identificationMethod, setIdentificationMethod] = useState<'phone' | 'dni' | null>(null);
-  const [phone, setPhone] = useState('');
-  const [dni, setDni] = useState('');
+  const [oAuthLoading, setOAuthLoading] = useState(false);
 
-  // Paso 1: Identificar el negocio (tenant)
-  const handleTenantSubmit = async () => {
-    if (!tenantId.trim()) {
-      Alert.alert('Error', 'Por favor, ingresá el código de tu negocio');
-      return;
-    }
-
-    setLoading(true);
+  // Manejar login con Google OAuth
+  const handleGoogleOAuth = async () => {
+    setOAuthLoading(true);
     try {
-      // Verificar que el tenant existe
-      const response = await fetch(`${API_BASE_URL}/api/public/customer/tenant/${tenantId}`);
-      const data = await response.json();
+      const redirectUri = getRedirectUri();
+      
+      // Obtener la URL de autorización del backend con el redirect URI de la app
+      const authUrlResponse = await fetch(
+        `${API_BASE_URL}/api/public/customer/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      if (!data.ok) {
-        Alert.alert('Error', 'Negocio no encontrado. Verificá el código.');
+      const authUrlData = await authUrlResponse.json();
+
+      if (!authUrlData.ok || !authUrlData.authUrl) {
+        Alert.alert('Error', authUrlData.error || 'Error al iniciar autenticación');
         return;
       }
 
-      setTenantName(data.data?.name || 'Tu negocio');
-      setStep('identify');
-      await AsyncStorage.setItem('tenant_id', String(data.data.id));
+      // Abrir el navegador para autenticación con el redirect URI de la app
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrlData.authUrl,
+        redirectUri
+      );
+
+      if (result.type === 'success' && result.url) {
+        // Extraer el código de la URL de respuesta
+        const url = new URL(result.url);
+        const code = url.searchParams.get('code');
+        const error = url.searchParams.get('error');
+
+        if (error) {
+          Alert.alert('Error', 'Error al autenticarse con Google');
+          return;
+        }
+
+        if (code) {
+          // Intercambiar código por datos del cliente
+          await exchangeCodeForCustomerData(code, redirectUri);
+        } else {
+          Alert.alert('Error', 'No se recibió código de autorización');
+        }
+      } else if (result.type === 'cancel') {
+        console.log('OAuth cancelado por el usuario');
+      }
     } catch (error: any) {
-      Alert.alert('Error', 'Error al verificar el negocio');
+      console.error('Error en OAuth:', error);
+      Alert.alert('Error', 'Error al iniciar sesión con Google');
+    } finally {
+      setOAuthLoading(false);
+    }
+  };
+
+  // Intercambiar código por datos del cliente
+  const exchangeCodeForCustomerData = async (code: string, redirectUri: string) => {
+    setLoading(true);
+    try {
+      // Usar el nuevo endpoint para intercambiar el código directamente
+      const response = await fetch(
+        `${API_BASE_URL}/api/public/customer/oauth/exchange-code`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            code,
+            redirect_uri: redirectUri,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        if (data.errorCode === 'CUSTOMER_NOT_FOUND') {
+          Alert.alert(
+            'Cuenta no encontrada',
+            'No se encontró una cuenta asociada a este email. Por favor, registrate primero en el negocio.'
+          );
+        } else {
+          Alert.alert('Error', data.error || 'Error al autenticarse');
+        }
+        return;
+      }
+
+      // Si hay múltiples tenants, mostrar selector
+      if (data.multipleTenants && data.tenants) {
+        // Por ahora, usar el primer tenant
+        // TODO: Implementar selector de tenant
+        const firstTenant = data.tenants[0];
+        await handleTenantSelection(data.email, firstTenant.tenant_id);
+        return;
+      }
+
+      // Si hay un solo tenant o datos directos
+      if (data.data) {
+        const customerData = {
+          customerId: data.data.customer_id,
+          tenantId: data.data.tenant_id,
+          tenantName: data.data.tenant_name,
+          name: data.data.name,
+          phone: data.data.phone,
+          email: data.data.email,
+          dni: data.data.dni,
+        };
+
+        await AsyncStorage.setItem('customer_data', JSON.stringify(customerData));
+        await AsyncStorage.setItem('customer_id', String(data.data.customer_id));
+        await AsyncStorage.setItem('tenant_id', String(data.data.tenant_id));
+        onLogin(customerData);
+      }
+    } catch (error: any) {
+      console.error('Error intercambiando código:', error);
+      Alert.alert('Error', 'Error al obtener datos del cliente');
     } finally {
       setLoading(false);
     }
   };
 
-  // Paso 2: Identificar al cliente por teléfono o DNI
-  const handleIdentifyCustomer = async () => {
-    if (!identificationMethod) {
-      Alert.alert('Error', 'Seleccioná un método de identificación');
-      return;
-    }
-
-    if (identificationMethod === 'phone' && !phone.trim()) {
-      Alert.alert('Error', 'Ingresá tu número de teléfono');
-      return;
-    }
-
-    if (identificationMethod === 'dni' && !dni.trim()) {
-      Alert.alert('Error', 'Ingresá tu DNI');
-      return;
-    }
-
-    setLoading(true);
+  // Seleccionar tenant cuando hay múltiples
+  const handleTenantSelection = async (email: string, tenantId: number) => {
     try {
-      const storedTenantId = await AsyncStorage.getItem('tenant_id');
-      if (!storedTenantId) {
-        Alert.alert('Error', 'Error: no se encontró el negocio');
-        return;
-      }
-
-      // Normalizar teléfono (solo números)
-      const normalizedPhone = phone.replace(/\D/g, '');
-      const normalizedDni = dni.trim();
-      
-      // Identificar cliente en el backend
-      const response = await fetch(`${API_BASE_URL}/api/public/customer/identify`, {
+      const response = await fetch(`${API_BASE_URL}/api/public/customer/oauth/select-tenant`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          tenant_id: parseInt(storedTenantId, 10),
-          phone: normalizedPhone || undefined,
-          dni: normalizedDni || undefined,
+          email,
+          tenant_id: tenantId,
         }),
       });
 
       const data = await response.json();
 
       if (!data.ok) {
-        Alert.alert('Error', data.error || 'Error al identificar cliente');
+        Alert.alert('Error', data.error || 'Error al seleccionar negocio');
         return;
       }
 
-      // Guardar datos del cliente
       const customerData = {
         customerId: data.data.customer_id,
         tenantId: data.data.tenant_id,
         tenantName: data.data.tenant_name,
         name: data.data.name,
         phone: data.data.phone,
+        email: data.data.email,
         dni: data.data.dni,
       };
 
       await AsyncStorage.setItem('customer_data', JSON.stringify(customerData));
       await AsyncStorage.setItem('customer_id', String(data.data.customer_id));
+      await AsyncStorage.setItem('tenant_id', String(data.data.tenant_id));
       onLogin(customerData);
     } catch (error: any) {
-      Alert.alert('Error', 'Error al identificar cliente');
-      console.error(error);
-    } finally {
-      setLoading(false);
+      console.error('Error seleccionando tenant:', error);
+      Alert.alert('Error', 'Error al seleccionar negocio');
     }
   };
 
-  // Pantalla de selección de tenant
-  if (step === 'tenant') {
-    return (
-      <KeyboardAvoidingView
-        style={styles.loginContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-        <ScrollView
-          contentContainerStyle={styles.loginContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>AR</Text>
-            </View>
-            <Text style={styles.appName}>ARJA ERP</Text>
-          </View>
-
-          <Text style={styles.welcomeTitle}>¡Bienvenido! 👋</Text>
-          <Text style={styles.welcomeSubtitle}>
-            Ingresá el código que te proporcionó tu negocio para acceder a tus turnos y servicios
-          </Text>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Código del Negocio</Text>
-            <Text style={styles.inputHint}>
-              Pedí este código en tu gimnasio, peluquería o negocio
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: 12345 o nombre-del-negocio"
-              placeholderTextColor="#999"
-              value={tenantId}
-              onChangeText={setTenantId}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
-            onPress={handleTenantSubmit}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Continuar</Text>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.helpText}>
-            Si no conocés el código, pedilo en tu negocio o contactá con el administrador
-          </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Pantalla de identificación del cliente
   return (
-    <KeyboardAvoidingView
-      style={styles.loginContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
+    <View style={styles.loginContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <ScrollView
         contentContainerStyle={styles.loginContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setStep('tenant')}
-        >
-          <Text style={styles.backButtonText}>← Volver</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.welcomeTitle}>Identificate</Text>
-        <Text style={styles.welcomeSubtitle}>
-          {tenantName && `Negocio: ${tenantName}`}
-        </Text>
-
-        <Text style={styles.methodTitle}>¿Cómo querés identificarte?</Text>
-
-        <View style={styles.methodContainer}>
-          <TouchableOpacity
-            style={[
-              styles.methodButton,
-              identificationMethod === 'phone' && styles.methodButtonActive,
-            ]}
-            onPress={() => setIdentificationMethod('phone')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.methodEmoji}>📱</Text>
-            <Text style={styles.methodText}>Teléfono</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.methodButton,
-              identificationMethod === 'dni' && styles.methodButtonActive,
-            ]}
-            onPress={() => setIdentificationMethod('dni')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.methodEmoji}>🆔</Text>
-            <Text style={styles.methodText}>DNI</Text>
-          </TouchableOpacity>
+        <View style={styles.logoContainer}>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoText}>AR</Text>
+          </View>
+          <Text style={styles.appName}>ARJA ERP</Text>
         </View>
 
-        {identificationMethod === 'phone' && (
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Número de Teléfono</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: 1123456789"
-              placeholderTextColor="#999"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-            />
-          </View>
-        )}
+        <Text style={styles.welcomeTitle}>¡Bienvenido! 👋</Text>
+        <Text style={styles.welcomeSubtitle}>
+          Ingresá con tu cuenta de Google para acceder a tus turnos y servicios
+        </Text>
 
-        {identificationMethod === 'dni' && (
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>DNI</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: 12345678"
-              placeholderTextColor="#999"
-              value={dni}
-              onChangeText={setDni}
-              keyboardType="number-pad"
-              autoCapitalize="none"
-            />
-          </View>
-        )}
+        <TouchableOpacity
+          style={[styles.googleButton, (loading || oAuthLoading) && styles.buttonDisabled]}
+          onPress={handleGoogleOAuth}
+          disabled={loading || oAuthLoading}
+          activeOpacity={0.8}
+        >
+          {(loading || oAuthLoading) ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Text style={styles.googleButtonEmoji}>🔐</Text>
+              <Text style={styles.googleButtonText}>Ingresar con Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-        {identificationMethod && (
-          <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
-            onPress={handleIdentifyCustomer}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Continuar</Text>
-            )}
-          </TouchableOpacity>
-        )}
+        <Text style={styles.helpText}>
+          El sistema identificará automáticamente tu negocio según tu email
+        </Text>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -389,6 +336,7 @@ export default function App() {
     await AsyncStorage.multiRemove([
       'customer_data',
       'tenant_id',
+      'customer_id',
       'customer_phone',
       'customer_dni',
     ]);
@@ -518,96 +466,29 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: 8,
   },
-  backButton: {
-    marginBottom: 20,
-    paddingVertical: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: ARJA_PRIMARY_START,
-    fontWeight: '600',
-  },
-  inputContainer: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  inputHint: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-    fontStyle: 'italic',
-  },
-  input: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 0, 0, 0.15)',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#1a1a1a',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  primaryButton: {
-    backgroundColor: ARJA_PRIMARY_START,
+  googleButton: {
+    backgroundColor: '#4285F4',
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: ARJA_PRIMARY_END,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    shadowColor: '#4285F4',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.32,
     shadowRadius: 12,
     elevation: 6,
   },
-  primaryButtonText: {
+  googleButtonEmoji: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  googleButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 0.3,
-  },
-  methodTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  methodContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 32,
-    gap: 16,
-  },
-  methodButton: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  methodButtonActive: {
-    borderColor: ARJA_PRIMARY_START,
-    backgroundColor: 'rgba(19, 181, 207, 0.08)',
-  },
-  methodEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  methodText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
   },
   helpText: {
     textAlign: 'center',
