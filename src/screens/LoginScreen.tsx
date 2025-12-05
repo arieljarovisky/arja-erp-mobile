@@ -1,196 +1,320 @@
 /**
- * Pantalla de Login/Identificación
+ * Pantalla de Login con estilos ARJA ERP
  */
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
+  ScrollView,
   Platform,
+  StatusBar,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../store/useAuthStore';
-import { authService } from '../services/auth';
+import { ArjaLogo } from '../components/ArjaLogo';
+import { useAppTheme } from '../utils/useAppTheme';
+
+const ARJA_PRIMARY_START = '#13b5cf';
+const ARJA_PRIMARY_END = '#0d7fd4';
+const API_BASE_URL = 'https://backend-production-1042.up.railway.app';
 
 interface LoginScreenProps {
   navigation: any;
 }
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const [phone, setPhone] = useState('');
-  const [dni, setDni] = useState('');
+  const { isDark } = useAppTheme();
   const [loading, setLoading] = useState(false);
-  const [useDni, setUseDni] = useState(false);
-
+  const [oAuthLoading, setOAuthLoading] = useState(false);
   const { setAuth } = useAuthStore();
 
-  const handleLogin = async () => {
-    if (!phone && !dni) {
-      Alert.alert('Error', 'Por favor, ingresá tu teléfono o DNI');
-      return;
-    }
+  // Obtener el redirect URI para OAuth
+  const getRedirectUri = () => {
+    return `${API_BASE_URL}/api/public/customer/oauth/google/callback`;
+  };
 
-    setLoading(true);
+  // Manejar login con Google OAuth
+  const handleGoogleOAuth = async () => {
+    setOAuthLoading(true);
     try {
-      // Identificar cliente (similar a WhatsApp)
-      const authData = await authService.identify(
-        useDni ? undefined : phone,
-        useDni ? dni : undefined,
-        undefined // tenantId se obtendrá del backend
+      const redirectUri = getRedirectUri();
+      const appDeepLink = 'arja-erp://oauth/callback';
+      
+      // Obtener la URL de autorización del backend
+      const authUrlResponse = await fetch(
+        `${API_BASE_URL}/api/public/customer/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}&app_deep_link=${encodeURIComponent(appDeepLink)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       );
 
-      setAuth(authData);
-      navigation.replace('Home');
+      const authUrlData = await authUrlResponse.json();
+
+      if (!authUrlData.ok || !authUrlData.authUrl) {
+        Alert.alert('Error', authUrlData.error || 'Error al iniciar autenticación');
+        return;
+      }
+
+      // Abrir el navegador para autenticación
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrlData.authUrl,
+        appDeepLink
+      );
+
+      if (result.type === 'success' && result.url) {
+        try {
+          const url = new URL(result.url);
+          const code = url.searchParams.get('code');
+          const error = url.searchParams.get('error');
+
+          if (error) {
+            Alert.alert('Error de Autenticación', 'Error al autenticarse con Google');
+            return;
+          }
+
+          if (!code) {
+            Alert.alert('Error', 'No se recibió código de autorización');
+            return;
+          }
+
+          // Intercambiar código por datos del cliente
+          await exchangeCodeForCustomerData(code, redirectUri);
+        } catch (urlError: any) {
+          console.error('[OAuth] Error parseando URL:', urlError);
+          Alert.alert('Error', 'Error al procesar la respuesta de Google');
+        }
+      } else if (result.type === 'cancel') {
+        console.log('OAuth cancelado por el usuario');
+      } else {
+        Alert.alert('Error', 'No se pudo completar la autenticación');
+      }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error al iniciar sesión');
+      console.error('Error en OAuth:', error);
+      Alert.alert('Error', 'Error al iniciar sesión con Google');
+    } finally {
+      setOAuthLoading(false);
+    }
+  };
+
+  // Intercambiar código por datos del cliente
+  const exchangeCodeForCustomerData = async (code: string, redirectUri: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/public/customer/oauth/exchange-code`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            code,
+            redirect_uri: redirectUri,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        Alert.alert('Error', data.error || 'Error al autenticarse');
+        return;
+      }
+
+      // Si hay datos del cliente, guardarlos y navegar
+      if (data.data && data.data.tenant_id) {
+        const customerData = {
+          customerId: data.data.customer_id,
+          tenantId: data.data.tenant_id,
+          customerName: data.data.name || null,
+          phone: data.data.phone || null,
+        };
+
+        setAuth(customerData);
+        // La navegación se manejará automáticamente por el useEffect en AppNavigator
+      }
+    } catch (error: any) {
+      console.error('Error intercambiando código:', error);
+      Alert.alert('Error', 'Error al obtener datos del cliente');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title}>¡Bienvenido! 👋</Text>
-        <Text style={styles.subtitle}>
-          Para continuar, necesitamos identificarte
-        </Text>
-
-        <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[styles.toggle, !useDni && styles.toggleActive]}
-            onPress={() => setUseDni(false)}
-          >
-            <Text style={[styles.toggleText, !useDni && styles.toggleTextActive]}>
-              Teléfono
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggle, useDni && styles.toggleActive]}
-            onPress={() => setUseDni(true)}
-          >
-            <Text style={[styles.toggleText, useDni && styles.toggleTextActive]}>
-              DNI
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {!useDni ? (
-          <TextInput
-            style={styles.input}
-            placeholder="Número de teléfono"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            placeholderTextColor="#999"
-          />
-        ) : (
-          <TextInput
-            style={styles.input}
-            placeholder="DNI (solo números)"
-            value={dni}
-            onChangeText={setDni}
-            keyboardType="numeric"
-            maxLength={8}
-            placeholderTextColor="#999"
-          />
-        )}
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
+    <View style={[styles.loginContainer, isDark && styles.loginContainerDark]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0e1c2c" : "#f5f9fc"} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.loginWrapper}
+      >
+        <ScrollView
+          contentContainerStyle={styles.loginContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Continuar</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          <View style={styles.logoContainer}>
+            <ArjaLogo size={80} isDark={isDark === true} />
+            <Text style={[styles.appName, isDark && styles.appNameDark]}>ARJA ERP</Text>
+            <Text style={[styles.appTagline, isDark && styles.appTaglineDark]}>Gestión Empresarial Inteligente</Text>
+          </View>
+
+          <View style={styles.formContainer}>
+            <Text style={[styles.welcomeTitle, isDark && styles.welcomeTitleDark]}>Iniciar sesión</Text>
+            <Text style={[styles.welcomeSubtitle, isDark && styles.welcomeSubtitleDark]}>
+              Ingresá con tu cuenta de Google para continuar
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.googleButton, 
+                isDark && styles.googleButtonDark,
+                (loading || oAuthLoading) && styles.buttonDisabled
+              ]}
+              onPress={handleGoogleOAuth}
+              disabled={loading || oAuthLoading}
+              activeOpacity={0.8}
+            >
+              {(loading || oAuthLoading) ? (
+                <ActivityIndicator color={isDark ? "#fff" : "#374151"} size="small" />
+              ) : (
+                <>
+                  <View style={styles.googleIconContainer}>
+                    <Text style={styles.googleIcon}>G</Text>
+                  </View>
+                  <Text style={[styles.googleButtonText, isDark && styles.googleButtonTextDark]}>Continuar con Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loginContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f5f9fc',
   },
-  content: {
+  loginContainerDark: {
+    backgroundColor: '#0e1c2c',
+  },
+  loginWrapper: {
     flex: 1,
-    padding: 20,
+  },
+  loginContent: {
+    flexGrow: 1,
+    padding: 24,
+    paddingTop: Platform.OS === 'ios' ? 80 : 60,
+    paddingBottom: 40,
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
-    textAlign: 'center',
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 4,
-  },
-  toggle: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
+  logoContainer: {
     alignItems: 'center',
+    marginBottom: 56,
   },
-  toggleActive: {
-    backgroundColor: '#007AFF',
-  },
-  toggleText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '500',
-  },
-  toggleTextActive: {
-    color: '#fff',
+  appName: {
+    fontSize: 24,
     fontWeight: '600',
+    color: '#051420',
+    letterSpacing: 0.5,
+    marginTop: 8,
   },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 16,
-    marginBottom: 20,
-    borderRadius: 10,
-    fontSize: 16,
+  appNameDark: {
+    color: '#e6f2f8',
   },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 16,
+  appTagline: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#1c8fa6',
+    letterSpacing: 1.2,
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  appTaglineDark: {
+    color: '#8cd9e9',
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '600',
+    color: '#051420',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  welcomeTitleDark: {
+    color: '#e6f2f8',
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: '#385868',
+    marginBottom: 32,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  welcomeSubtitleDark: {
+    color: '#90acbc',
+  },
+  googleButton: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 10,
+    marginBottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#d2d8e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  googleButtonDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: '#2c4a5f',
+  },
+  googleIconContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  googleIcon: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  googleButtonText: {
+    color: '#374151',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  googleButtonTextDark: {
+    color: '#e6f2f8',
   },
   buttonDisabled: {
     opacity: 0.6,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
 });
-

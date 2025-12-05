@@ -4,7 +4,15 @@
  */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authService, AuthData } from '../services/auth';
+import { authService } from '../services/auth';
+
+// Tipo adaptado para el store
+export interface StoreAuthData {
+  customerId: number;
+  tenantId: number;
+  customerName?: string | null;
+  phone?: string | null;
+}
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -14,19 +22,20 @@ interface AuthState {
   phone: string | null;
   
   // Actions
-  setAuth: (data: AuthData) => void;
+  setAuth: (data: StoreAuthData) => void;
   clearAuth: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  isAuthenticated: false,
+export const useAuthStore = create<AuthState>((set, get) => ({
+  // CRÍTICO: Siempre inicializar con boolean explícito, nunca undefined
+  isAuthenticated: Boolean(false),
   customerId: null,
   tenantId: null,
   customerName: null,
   phone: null,
 
-  setAuth: (data: AuthData) => {
+  setAuth: (data: StoreAuthData) => {
     // Guardar en AsyncStorage manualmente
     AsyncStorage.setItem('customer_id', String(data.customerId || ''));
     AsyncStorage.setItem('tenant_id', String(data.tenantId || ''));
@@ -39,7 +48,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     AsyncStorage.setItem('is_authenticated', 'true');
 
     set({
-      isAuthenticated: true,
+      isAuthenticated: Boolean(true),
       customerId: data.customerId,
       tenantId: data.tenantId,
       customerName: data.customerName || null,
@@ -51,7 +60,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await authService.logout();
     await AsyncStorage.multiRemove(['customer_id', 'tenant_id', 'customer_name', 'phone', 'is_authenticated']);
     set({
-      isAuthenticated: false,
+      isAuthenticated: Boolean(false),
       customerId: null,
       tenantId: null,
       customerName: null,
@@ -69,13 +78,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         'is_authenticated',
       ]);
 
-      const isAuthenticated = isAuth[1] === 'true';
+      // Asegurar que isAuthenticated sea siempre un boolean real, no un string
+      const isAuthenticated = Boolean(isAuth[1] === 'true');
       const cId = customerId[1] ? parseInt(customerId[1], 10) : null;
       const tId = tenantId[1] ? parseInt(tenantId[1], 10) : null;
 
       if (isAuthenticated && cId && tId) {
         set({
-          isAuthenticated: true,
+          isAuthenticated: Boolean(true),
           customerId: cId,
           tenantId: tId,
           customerName: customerName[1] || null,
@@ -83,7 +93,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         });
       } else {
         set({
-          isAuthenticated: false,
+          isAuthenticated: Boolean(false),
           customerId: null,
           tenantId: null,
           customerName: null,
@@ -93,7 +103,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (error) {
       console.error('Error checking auth:', error);
       set({
-        isAuthenticated: false,
+        isAuthenticated: Boolean(false),
         customerId: null,
         tenantId: null,
         customerName: null,

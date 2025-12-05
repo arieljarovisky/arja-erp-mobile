@@ -4,7 +4,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
-import apiClient from '../api/client';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -101,6 +100,46 @@ export const authService = {
    */
   logout: async (): Promise<void> => {
     await AsyncStorage.multiRemove(['access_token', 'refresh_token', 'user_data']);
+  },
+
+  /**
+   * Identificar cliente por teléfono o DNI
+   */
+  identify: async (
+    phone?: string,
+    dni?: string,
+    tenantId?: number
+  ): Promise<{ customerId: number; tenantId: number; customerName?: string; phone?: string }> => {
+    try {
+      const API_BASE_URL = 'https://backend-production-1042.up.railway.app';
+      const response = await fetch(`${API_BASE_URL}/api/public/customer/identify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone,
+          dni,
+          tenant_id: tenantId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.ok || !data.data) {
+        throw new Error(data.error || 'Error al identificar cliente');
+      }
+
+      return {
+        customerId: data.data.customer_id || data.data.id,
+        tenantId: data.data.tenant_id,
+        customerName: data.data.name || data.data.customer_name || null,
+        phone: data.data.phone || phone || null,
+      };
+    } catch (error: any) {
+      console.error('[Auth Service] Error identificando cliente:', error);
+      throw new Error(error.message || 'Error al identificar cliente');
+    }
   },
 };
 

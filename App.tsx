@@ -16,7 +16,12 @@ import {
   TextInput,
   KeyboardAvoidingView,
   useColorScheme,
+  RefreshControl,
 } from 'react-native';
+import { Svg, Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
@@ -38,15 +43,188 @@ const getRedirectUri = () => {
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
 
+// Componentes de Iconos SVG Profesionales
+const CalendarIcon = ({ size = 24, color = ARJA_PRIMARY_START }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const PlusIcon = ({ size = 24, color = '#10b981' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 5v14m-7-7h14"
+      stroke={color}
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const ClassesIcon = ({ size = 24, color = '#f59e0b' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 6.252v13m-9-4.5v4.5h18v-4.5M3 6.252h18M3 6.252l9-4.5 9 4.5M12 2.25v4.002"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const QRCodeIcon = ({ size = 24, color = '#8b5cf6' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM16 13h2M20 13h2M13 16v2M13 20v2M16 16h2v2h-2zM20 16h2v2h-2zM16 20h2v2h-2zM20 20h2v2h-2z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const WorkoutIcon = ({ size = 24, color = '#10b981' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M7 13l3 3 7-7"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const CreditCardIcon = ({ size = 24, color = '#8b5cf6' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M3 10h18M7 15h1m4 0h1m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const UserIcon = ({ size = 20, color = '#051420' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+// Iconos para el menú inferior
+const HomeIcon = ({ size = 24, color = '#051420', filled = false }: { size?: number; color?: string; filled?: boolean }) => {
+  const isFilled = filled === true;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={isFilled ? color : 'none'}>
+      <Path
+        d={isFilled 
+          ? "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+          : "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+        }
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
+const BellIcon = ({ size = 24, color = '#051420', filled = false }: { size?: number; color?: string; filled?: boolean }) => {
+  const isFilled = filled === true;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={isFilled ? color : 'none'}>
+      <Path
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
+const AccountIcon = ({ size = 24, color = '#051420', filled = false }: { size?: number; color?: string; filled?: boolean }) => {
+  const isFilled = filled === true;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={isFilled ? color : 'none'}>
+      <Path
+        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
+const CoursesIcon = ({ size = 24, color = '#051420', filled = false }: { size?: number; color?: string; filled?: boolean }) => {
+  const isFilled = filled === true;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={isFilled ? color : 'none'}>
+      <Path
+        d="M12 14l9-5-9-5-9 5 9 5z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 14v7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+};
+
 // Componente de Logo ARJA ERP
 function ArjaLogo({ size = 80, isDark = false }: { size?: number; isDark?: boolean }) {
   const logoSize = size;
   const iconSize = logoSize * 0.85;
   
-  const primaryColor = isDark ? '#4FD4E4' : ARJA_PRIMARY_START;
-  const secondaryColor = isDark ? '#46C5E6' : ARJA_PRIMARY_END;
-  const bgColor = isDark ? 'rgba(7, 23, 36, 0.96)' : '#ffffff';
-  const borderColor = isDark ? 'rgba(79, 212, 228, 0.28)' : 'rgba(19, 181, 207, 0.16)';
+  // Asegurar que isDark sea siempre un boolean
+  const isDarkMode = Boolean(isDark);
+  
+  const primaryColor = isDarkMode ? '#4FD4E4' : ARJA_PRIMARY_START;
+  const secondaryColor = isDarkMode ? '#46C5E6' : ARJA_PRIMARY_END;
+  const bgColor = isDarkMode ? 'rgba(7, 23, 36, 0.96)' : '#ffffff';
+  const borderColor = isDarkMode ? 'rgba(79, 212, 228, 0.28)' : 'rgba(19, 181, 207, 0.16)';
   
   return (
     <View style={[
@@ -58,9 +236,9 @@ function ArjaLogo({ size = 80, isDark = false }: { size?: number; isDark?: boole
         borderRadius: logoSize * 0.22,
         borderWidth: 1,
         borderColor: borderColor,
-        shadowColor: isDark ? '#053968' : ARJA_PRIMARY_START,
+        shadowColor: isDarkMode ? '#053968' : ARJA_PRIMARY_START,
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: isDark ? 0.36 : 0.15,
+        shadowOpacity: isDarkMode ? 0.36 : 0.15,
         shadowRadius: 12,
         elevation: 6,
       }
@@ -104,8 +282,7 @@ function ArjaLogo({ size = 80, isDark = false }: { size?: number; isDark?: boole
 
 // Pantalla de login para CLIENTES con OAuth
 function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void }) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { isDark } = useAppTheme();
   const [loading, setLoading] = useState(false);
   const [oAuthLoading, setOAuthLoading] = useState(false);
   const [showTenantSelection, setShowTenantSelection] = useState(false);
@@ -418,7 +595,7 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.logoContainer}>
-              <ArjaLogo size={80} isDark={isDark} />
+              <ArjaLogo size={80} isDark={isDark === true} />
               <Text style={[styles.appName, isDark && styles.appNameDark]}>ARJA ERP</Text>
             </View>
 
@@ -489,7 +666,7 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.logoContainer}>
-            <ArjaLogo size={80} isDark={isDark} />
+            <ArjaLogo size={80} isDark={isDark === true} />
             <Text style={[styles.appName, isDark && styles.appNameDark]}>ARJA ERP</Text>
             <Text style={[styles.appTagline, isDark && styles.appTaglineDark]}>Gestión Empresarial Inteligente</Text>
           </View>
@@ -528,71 +705,544 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
   );
 }
 
+// Hook para manejar tema (modo oscuro desde configuraciones)
+function useAppTheme() {
+  const systemTheme = useColorScheme();
+  const [isDark, setIsDark] = useState(false);
+  const [themeLoaded, setThemeLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedTheme = await AsyncStorage.getItem('app_theme');
+        if (savedTheme === 'dark') {
+          setIsDark(true);
+        } else if (savedTheme === 'light') {
+          setIsDark(false);
+        } else {
+          // Por defecto usar el tema del sistema
+          setIsDark(systemTheme === 'dark');
+        }
+      } catch (error) {
+        console.error('Error loading theme:', error);
+        setIsDark(systemTheme === 'dark');
+      } finally {
+        setThemeLoaded(true);
+      }
+    };
+    loadTheme();
+  }, [systemTheme]);
+
+  const toggleTheme = async (dark: boolean) => {
+    setIsDark(dark);
+    try {
+      await AsyncStorage.setItem('app_theme', dark ? 'dark' : 'light');
+    } catch (error) {
+      console.error('Error saving theme:', error);
+    }
+  };
+
+  // Asegurar que isDark sea siempre un boolean explícito
+  return { isDark: Boolean(isDark), themeLoaded, toggleTheme };
+}
+
 // Pantalla Home para CLIENTES
 function CustomerHomeScreen({ customerData, onLogout }: { customerData: any; onLogout: () => void }) {
+  const { isDark } = useAppTheme();
+  const [refreshing, setRefreshing] = useState(false);
+  
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // Aquí puedes agregar la lógica para actualizar los datos
+      // Por ejemplo, recargar eventos, turnos, etc.
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulación de carga
+      
+      // TODO: Agregar llamadas a la API para actualizar datos
+      // Ejemplo:
+      // const events = await fetchUpcomingEvents();
+      // const appointments = await fetchAppointments();
+      
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      Alert.alert('Error', 'No se pudo actualizar la información');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+  
   return (
-    <View style={styles.homeContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-      <ScrollView
-        style={styles.homeScrollView}
-        contentContainerStyle={styles.homeContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.homeHeader}>
-          <View style={styles.headerText}>
-            <Text style={styles.homeGreeting}>¡Hola!</Text>
-            <Text style={styles.homeUserName}>
-              {customerData?.name || customerData?.phone || 'Cliente'}
-            </Text>
-            {customerData?.tenantName && (
-              <Text style={styles.tenantName}>{customerData.tenantName}</Text>
-            )}
+    <View style={[styles.homeContainer, isDark && styles.homeContainerDark]}>
+      <StatusBar barStyle="light-content" backgroundColor={ARJA_PRIMARY_START} translucent={true} />
+      <View style={styles.homeWrapper}>
+        <ScrollView
+          style={styles.homeScrollView}
+          contentContainerStyle={styles.homeContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={ARJA_PRIMARY_START}
+              colors={[ARJA_PRIMARY_START]}
+              progressBackgroundColor="#ffffff"
+            />
+          }
+        >
+        {/* Header con gradiente */}
+        <View style={[styles.homeHeader, isDark && styles.homeHeaderDark]}>
+          <LinearGradient
+            colors={[ARJA_PRIMARY_START, ARJA_PRIMARY_END]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            <View style={styles.headerContent}>
+              <View style={styles.headerText}>
+                <Text style={[styles.homeGreeting, isDark && styles.homeGreetingDark]}>¡Hola!</Text>
+                <Text style={[styles.homeUserName, isDark && styles.homeUserNameDark]}>
+                  {customerData?.name || customerData?.phone || 'Cliente'}
+                </Text>
+                {customerData?.tenantName && (
+                  <Text style={[styles.tenantName, isDark && styles.tenantNameDark]}>
+                    {customerData.tenantName}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity 
+                onPress={onLogout} 
+                style={[styles.profileButton, isDark && styles.profileButtonDark]}
+                activeOpacity={0.7}
+              >
+                <UserIcon size={20} color={isDark ? '#e6f2f8' : '#ffffff'} />
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Sección de acciones rápidas */}
+        <View style={styles.sectionContainer}>
+          <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Acciones rápidas</Text>
+          <View style={styles.menuGrid}>
+            {/* Rutinas de Gimnasio */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                // TODO: Navegar a pantalla de rutinas
+                Alert.alert('Rutinas', 'Próximamente: Gestión de rutinas de gimnasio');
+              }}
+            >
+              <LinearGradient
+                colors={[ARJA_PRIMARY_START, '#0d7fd4']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <WorkoutIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Rutinas</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Gimnasio</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Clases */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                // TODO: Navegar a pantalla de clases
+                Alert.alert('Clases', 'Próximamente: Gestión de clases individuales y grupales');
+              }}
+            >
+              <LinearGradient
+                colors={['#0d7fd4', '#1a9bc8']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <ClassesIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Clases</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Individuales y grupales</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Mis Turnos */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                // TODO: Navegar a pantalla de turnos
+                Alert.alert('Mis Turnos', 'Próximamente: Ver y gestionar tus turnos');
+              }}
+            >
+              <LinearGradient
+                colors={['#1a9bc8', ARJA_PRIMARY_START]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <CalendarIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Mis Turnos</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Ver y gestionar</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Membresías */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                // TODO: Navegar a pantalla de membresías
+                Alert.alert('Membresías', 'Próximamente: Ver y gestionar membresías');
+              }}
+            >
+              <LinearGradient
+                colors={[ARJA_PRIMARY_END, '#0a8bb8']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <CreditCardIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Membresías</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Ver planes y pagos</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Acceso QR */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                // TODO: Mostrar QR para acceso
+                Alert.alert('Acceso QR', 'Próximamente: Mostrar código QR para acceso al gimnasio');
+              }}
+            >
+              <LinearGradient
+                colors={['#0a8bb8', ARJA_PRIMARY_START]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <QRCodeIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Acceso QR</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Entrada al gimnasio</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Reservar Turno */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                // TODO: Navegar a pantalla de reserva
+                Alert.alert('Reservar', 'Próximamente: Reservar nuevo turno o clase');
+              }}
+            >
+              <LinearGradient
+                colors={[ARJA_PRIMARY_START, '#0d7fd4']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <PlusIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Reservar</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Nuevo turno</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={onLogout} style={styles.profileButton}>
-            <Text style={styles.profileEmoji}>👤</Text>
-          </TouchableOpacity>
         </View>
 
-        <View style={styles.menuGrid}>
-          <TouchableOpacity style={[styles.menuCard, styles.cardBlue]} activeOpacity={0.8}>
-            <View style={[styles.cardIcon, styles.iconBlue]}>
-              <Text style={styles.cardEmoji}>📅</Text>
+        {/* Sección de Próximos Eventos */}
+        <View style={styles.sectionContainer}>
+          <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Próximos eventos</Text>
+          <View style={styles.eventsList}>
+            {/* Evento ejemplo 1 */}
+            <View style={[styles.eventCard, isDark && styles.eventCardDark]}>
+              <View style={[styles.eventDateBadge, isDark && styles.eventDateBadgeDark]}>
+                <Text style={[styles.eventDay, isDark && styles.eventDayDark]}>15</Text>
+                <Text style={[styles.eventMonth, isDark && styles.eventMonthDark]}>ENE</Text>
+              </View>
+              <View style={styles.eventContent}>
+                <Text style={[styles.eventTitle, isDark && styles.eventTitleDark]}>Corte de pelo</Text>
+                <Text style={[styles.eventTime, isDark && styles.eventTimeDark]}>10:00 AM</Text>
+                <Text style={[styles.eventDescription, isDark && styles.eventDescriptionDark]}>
+                  Con Juan Pérez
+                </Text>
+              </View>
+              <View style={[styles.eventStatus, styles.eventStatusPending]}>
+                <Text style={styles.eventStatusText}>Pendiente</Text>
+              </View>
             </View>
-            <Text style={styles.cardTitle}>Mis Turnos</Text>
-            <Text style={styles.cardDescription}>Ver y gestionar</Text>
-          </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuCard, styles.cardGreen]} activeOpacity={0.8}>
-            <View style={[styles.cardIcon, styles.iconGreen]}>
-              <Text style={styles.cardEmoji}>➕</Text>
+            {/* Evento ejemplo 2 */}
+            <View style={[styles.eventCard, isDark && styles.eventCardDark]}>
+              <View style={[styles.eventDateBadge, isDark && styles.eventDateBadgeDark]}>
+                <Text style={[styles.eventDay, isDark && styles.eventDayDark]}>18</Text>
+                <Text style={[styles.eventMonth, isDark && styles.eventMonthDark]}>ENE</Text>
+              </View>
+              <View style={styles.eventContent}>
+                <Text style={[styles.eventTitle, isDark && styles.eventTitleDark]}>Clase de yoga</Text>
+                <Text style={[styles.eventTime, isDark && styles.eventTimeDark]}>06:00 PM</Text>
+                <Text style={[styles.eventDescription, isDark && styles.eventDescriptionDark]}>
+                  Clase grupal
+                </Text>
+              </View>
+              <View style={[styles.eventStatus, styles.eventStatusConfirmed]}>
+                <Text style={[styles.eventStatusText, styles.eventStatusTextConfirmed]}>Confirmado</Text>
+              </View>
             </View>
-            <Text style={styles.cardTitle}>Reservar</Text>
-            <Text style={styles.cardDescription}>Nuevo turno</Text>
-          </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuCard, styles.cardOrange]} activeOpacity={0.8}>
-            <View style={[styles.cardIcon, styles.iconOrange]}>
-              <Text style={styles.cardEmoji}>🏋️</Text>
+            {/* Evento ejemplo 3 */}
+            <View style={[styles.eventCard, isDark && styles.eventCardDark]}>
+              <View style={[styles.eventDateBadge, isDark && styles.eventDateBadgeDark]}>
+                <Text style={[styles.eventDay, isDark && styles.eventDayDark]}>20</Text>
+                <Text style={[styles.eventMonth, isDark && styles.eventMonthDark]}>ENE</Text>
+              </View>
+              <View style={styles.eventContent}>
+                <Text style={[styles.eventTitle, isDark && styles.eventTitleDark]}>Consulta médica</Text>
+                <Text style={[styles.eventTime, isDark && styles.eventTimeDark]}>11:30 AM</Text>
+                <Text style={[styles.eventDescription, isDark && styles.eventDescriptionDark]}>
+                  Dr. García
+                </Text>
+              </View>
+              <View style={[styles.eventStatus, styles.eventStatusPending]}>
+                <Text style={styles.eventStatusText}>Pendiente</Text>
+              </View>
             </View>
-            <Text style={styles.cardTitle}>Clases</Text>
-            <Text style={styles.cardDescription}>Ver clases</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.menuCard, styles.cardPurple]} activeOpacity={0.8}>
-            <View style={[styles.cardIcon, styles.iconPurple]}>
-              <Text style={styles.cardEmoji}>💳</Text>
-            </View>
-            <Text style={styles.cardTitle}>Membresías</Text>
-            <Text style={styles.cardDescription}>Ver planes</Text>
-          </TouchableOpacity>
+          </View>
         </View>
-      </ScrollView>
+        </ScrollView>
+        
+        {/* Floating Action Button */}
+        <TouchableOpacity
+          style={[styles.fab, isDark && styles.fabDark]}
+          activeOpacity={0.8}
+          onPress={() => {
+            Alert.alert('Nuevo', '¿Qué querés crear?', [
+              { text: 'Reservar Turno', onPress: () => {} },
+              { text: 'Nueva Clase', onPress: () => {} },
+              { text: 'Cancelar', style: 'cancel' },
+            ]);
+          }}
+        >
+          <PlusIcon size={24} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
     </View>
+  );
+}
+
+// Pantallas adicionales para el menú
+function NotificationsScreen() {
+  const { isDark } = useAppTheme();
+  const isDarkMode = Boolean(isDark);
+  return (
+    <View style={[styles.screenContainer, isDarkMode && styles.screenContainerDark]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <View style={styles.emptyScreen}>
+        <BellIcon size={64} color={isDarkMode ? '#4FD4E4' : ARJA_PRIMARY_START} />
+        <Text style={[styles.emptyScreenTitle, isDarkMode && styles.emptyScreenTitleDark]}>Notificaciones</Text>
+        <Text style={[styles.emptyScreenText, isDarkMode && styles.emptyScreenTextDark]}>
+          No tenés notificaciones nuevas
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function QRScreen() {
+  const { isDark } = useAppTheme();
+  const isDarkMode = Boolean(isDark);
+  return (
+    <View style={[styles.screenContainer, isDarkMode && styles.screenContainerDark]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <View style={styles.emptyScreen}>
+        <QRCodeIcon size={64} color={isDarkMode ? '#4FD4E4' : ARJA_PRIMARY_START} />
+        <Text style={[styles.emptyScreenTitle, isDarkMode && styles.emptyScreenTitleDark]}>Acceso QR</Text>
+        <Text style={[styles.emptyScreenText, isDarkMode && styles.emptyScreenTextDark]}>
+          Mostrá este código QR en la entrada
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function AccountScreen() {
+  const { isDark } = useAppTheme();
+  const isDarkMode = Boolean(isDark);
+  return (
+    <View style={[styles.screenContainer, isDarkMode && styles.screenContainerDark]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <View style={styles.emptyScreen}>
+        <AccountIcon size={64} color={isDarkMode ? '#4FD4E4' : ARJA_PRIMARY_START} />
+        <Text style={[styles.emptyScreenTitle, isDarkMode && styles.emptyScreenTitleDark]}>Cuenta Corriente</Text>
+        <Text style={[styles.emptyScreenText, isDarkMode && styles.emptyScreenTextDark]}>
+          Ver movimientos y saldo
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function CoursesScreen() {
+  const { isDark } = useAppTheme();
+  const isDarkMode = Boolean(isDark);
+  return (
+    <View style={[styles.screenContainer, isDarkMode && styles.screenContainerDark]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <View style={styles.emptyScreen}>
+        <CoursesIcon size={64} color={isDarkMode ? '#4FD4E4' : ARJA_PRIMARY_START} />
+        <Text style={[styles.emptyScreenTitle, isDarkMode && styles.emptyScreenTitleDark]}>Mis Cursos</Text>
+        <Text style={[styles.emptyScreenText, isDarkMode && styles.emptyScreenTextDark]}>
+          Ver tus cursos y clases
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// Navegador principal con tabs
+const Tab = createBottomTabNavigator();
+
+function MainNavigator({ customerData, onLogout }: { customerData: any; onLogout: () => void }) {
+  const { isDark } = useAppTheme();
+  const isDarkMode = Boolean(isDark);
+  
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: ARJA_PRIMARY_START,
+        tabBarInactiveTintColor: isDarkMode ? '#90acbc' : '#666',
+        tabBarStyle: {
+          backgroundColor: isDarkMode ? '#1e2f3f' : '#ffffff',
+          borderTopWidth: 1,
+          borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+          height: Platform.OS === 'ios' ? 90 : 70,
+          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+          paddingTop: 10,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500' as const,
+        },
+      }}
+    >
+      <Tab.Screen
+        name="Inicio"
+        options={{
+          headerShown: false,
+          tabBarIcon: ({ focused, color, size }) => {
+            const iconSize = typeof size === 'number' ? size : 24;
+            const isFocused = Boolean(focused);
+            return <HomeIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} filled={isFocused} />;
+          },
+        }}
+      >
+        {() => <CustomerHomeScreen customerData={customerData} onLogout={onLogout} />}
+      </Tab.Screen>
+      
+      <Tab.Screen
+        name="Notificaciones"
+        options={{
+          headerShown: false,
+          tabBarIcon: ({ focused, color, size }) => {
+            const iconSize = typeof size === 'number' ? size : 24;
+            const isFocused = Boolean(focused);
+            return <BellIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} filled={isFocused} />;
+          },
+        }}
+      >
+        {() => <NotificationsScreen />}
+      </Tab.Screen>
+      
+      <Tab.Screen
+        name=""
+        options={{
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarIcon: ({ focused, color, size }) => {
+            const iconSize = typeof size === 'number' ? size : 24;
+            const isFocused = Boolean(focused);
+            const styleArray: any[] = [styles.qrTabButton];
+            if (isFocused === true) {
+              styleArray.push(styles.qrTabButtonActive);
+            }
+            if (Boolean(isDarkMode) === true) {
+              styleArray.push(styles.qrTabButtonDark);
+            }
+            return (
+              <View style={styleArray}>
+                <QRCodeIcon size={iconSize + 4} color={isFocused ? '#ffffff' : ARJA_PRIMARY_START} />
+              </View>
+            );
+          },
+        }}
+      >
+        {() => <QRScreen />}
+      </Tab.Screen>
+      
+      <Tab.Screen
+        name="Cuenta"
+        options={{
+          headerShown: false,
+          tabBarLabel: 'Cta. Corriente',
+          tabBarIcon: ({ focused, color, size }) => {
+            const iconSize = typeof size === 'number' ? size : 24;
+            const isFocused = Boolean(focused);
+            return <AccountIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} filled={isFocused} />;
+          },
+        }}
+      >
+        {() => <AccountScreen />}
+      </Tab.Screen>
+      
+      <Tab.Screen
+        name="Cursos"
+        options={{
+          headerShown: false,
+          tabBarLabel: 'Mis Cursos',
+          tabBarIcon: ({ focused, color, size }) => {
+            const iconSize = typeof size === 'number' ? size : 24;
+            const isFocused = Boolean(focused);
+            return <CoursesIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} filled={isFocused} />;
+          },
+        }}
+      >
+        {() => <CoursesScreen />}
+      </Tab.Screen>
+    </Tab.Navigator>
   );
 }
 
 // Componente principal
 export default function App() {
+  // Los hooks deben llamarse siempre en el mismo orden, antes de cualquier return condicional
+  const { isDark } = useAppTheme();
   const [customerData, setCustomerData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -639,7 +1289,12 @@ export default function App() {
   }
 
   if (customerData) {
-    return <CustomerHomeScreen customerData={customerData} onLogout={handleLogout} />;
+    const isDarkMode = Boolean(isDark);
+    return (
+      <NavigationContainer theme={isDarkMode ? DarkTheme : DefaultTheme}>
+        <MainNavigator customerData={customerData} onLogout={handleLogout} />
+      </NavigationContainer>
+    );
   }
 
   return <CustomerLoginScreen onLogin={setCustomerData} />;
@@ -893,128 +1548,354 @@ const styles = StyleSheet.create({
   // Home
   homeContainer: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f5f9fc',
+  },
+  homeContainerDark: {
+    backgroundColor: '#0e1c2c',
+  },
+  homeWrapper: {
+    flex: 1,
+    position: 'relative',
   },
   homeScrollView: {
     flex: 1,
   },
   homeContent: {
-    padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   homeHeader: {
+    paddingTop: 0,
+    paddingBottom: 0,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  homeHeaderDark: {
+    backgroundColor: '#1e2f3f',
+  },
+  headerGradient: {
+    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 40) + 10,
+    paddingBottom: 32,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: ARJA_PRIMARY_START,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-    paddingHorizontal: 4,
+    alignItems: 'flex-start',
   },
   headerText: {
     flex: 1,
+    paddingRight: 12,
   },
   homeGreeting: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 4,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 6,
     fontWeight: '500',
+    letterSpacing: 0.5,
+  },
+  homeGreetingDark: {
+    color: 'rgba(230, 242, 248, 0.8)',
   },
   homeUserName: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 4,
+    letterSpacing: -0.5,
+    lineHeight: 34,
+  },
+  homeUserNameDark: {
+    color: '#e6f2f8',
   },
   tenantName: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  tenantNameDark: {
+    color: '#4FD4E4',
   },
   profileButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#fff',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  profileEmoji: {
-    fontSize: 26,
+  profileButtonDark: {
+    backgroundColor: 'rgba(46, 74, 95, 0.4)',
+    borderColor: 'rgba(79, 212, 228, 0.3)',
+  },
+  sectionContainer: {
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#051420',
+    marginBottom: 20,
+    letterSpacing: -0.3,
+  },
+  sectionTitleDark: {
+    color: '#e6f2f8',
   },
   menuGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 12,
   },
   menuCard: {
     width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
+    borderRadius: 20,
+    marginBottom: 0,
+    overflow: 'hidden',
+    shadowColor: ARJA_PRIMARY_START,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.08)',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  cardBlue: {
-    borderTopWidth: 4,
-    borderTopColor: ARJA_PRIMARY_START,
+  cardGradient: {
+    borderRadius: 20,
+    minHeight: 140,
   },
-  cardGreen: {
-    borderTopWidth: 4,
-    borderTopColor: '#34d399',
-  },
-  cardOrange: {
-    borderTopWidth: 4,
-    borderTopColor: '#f59e0b',
-  },
-  cardPurple: {
-    borderTopWidth: 4,
-    borderTopColor: '#a855f7',
+  cardGradientOverlay: {
+    padding: 20,
+    alignItems: 'center',
+    minHeight: 140,
+    justifyContent: 'center',
   },
   cardIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
-  iconBlue: {
-    backgroundColor: 'rgba(19, 181, 207, 0.12)',
-  },
-  iconGreen: {
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
-  },
-  iconOrange: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-  },
-  iconPurple: {
-    backgroundColor: 'rgba(168, 85, 247, 0.12)',
-  },
-  cardEmoji: {
-    fontSize: 32,
+  iconWhite: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 6,
+    color: '#051420',
+    marginBottom: 4,
     textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  cardTitleWhite: {
+    color: '#ffffff',
   },
   cardDescription: {
     fontSize: 12,
-    color: '#666',
+    color: '#385868',
     textAlign: 'center',
+    fontWeight: '400',
+    lineHeight: 16,
+  },
+  cardDescriptionWhite: {
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  // Próximos Eventos
+  eventsList: {
+    gap: 12,
+  },
+  eventCard: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
+    alignItems: 'center',
+  },
+  eventCardDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  eventDateBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: 'rgba(19, 181, 207, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  eventDateBadgeDark: {
+    backgroundColor: 'rgba(79, 212, 228, 0.15)',
+  },
+  eventDay: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: ARJA_PRIMARY_START,
+    lineHeight: 24,
+  },
+  eventDayDark: {
+    color: '#4FD4E4',
+  },
+  eventMonth: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: ARJA_PRIMARY_START,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  eventMonthDark: {
+    color: '#4FD4E4',
+  },
+  eventContent: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#051420',
+    marginBottom: 4,
+    letterSpacing: -0.2,
+  },
+  eventTitleDark: {
+    color: '#e6f2f8',
+  },
+  eventTime: {
+    fontSize: 13,
     fontWeight: '500',
+    color: ARJA_PRIMARY_START,
+    marginBottom: 2,
+  },
+  eventTimeDark: {
+    color: '#4FD4E4',
+  },
+  eventDescription: {
+    fontSize: 12,
+    color: '#385868',
+    fontWeight: '400',
+  },
+  eventDescriptionDark: {
+    color: '#90acbc',
+  },
+  eventStatus: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginLeft: 12,
+  },
+  eventStatusPending: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  },
+  eventStatusConfirmed: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  eventStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#f59e0b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  eventStatusTextConfirmed: {
+    color: '#10b981',
+  },
+  // Pantallas
+  screenContainer: {
+    flex: 1,
+    backgroundColor: '#f5f9fc',
+  },
+  screenContainerDark: {
+    backgroundColor: '#0e1c2c',
+  },
+  emptyScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyScreenTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#051420',
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  emptyScreenTitleDark: {
+    color: '#e6f2f8',
+  },
+  emptyScreenText: {
+    fontSize: 16,
+    color: '#385868',
+    textAlign: 'center',
+  },
+  emptyScreenTextDark: {
+    color: '#90acbc',
+  },
+  // Botón QR destacado en el menú
+  qrTabButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: ARJA_PRIMARY_START,
+    shadowColor: ARJA_PRIMARY_START,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  qrTabButtonActive: {
+    backgroundColor: ARJA_PRIMARY_START,
+    borderColor: ARJA_PRIMARY_START,
+  },
+  qrTabButtonDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: ARJA_PRIMARY_START,
+  },
+  // Floating Action Button
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: ARJA_PRIMARY_START,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: ARJA_PRIMARY_START,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabDark: {
+    backgroundColor: ARJA_PRIMARY_START,
   },
 });
