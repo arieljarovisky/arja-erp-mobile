@@ -1,0 +1,2 @@
+arja-erp://oauth/callback
+
