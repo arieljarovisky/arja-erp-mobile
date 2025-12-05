@@ -2,16 +2,22 @@
 
 App móvil para clientes de ARJA ERP construida con React Native y Expo.
 
+## 📦 Repositorio
+
+**Repositorio GitHub**: [https://github.com/arieljarovisky/arja-erp-mobile.git](https://github.com/arieljarovisky/arja-erp-mobile.git)
+
 ## 📍 Ubicación Actual
 
-La app está actualmente en:
+La app está en:
 ```
 pelu-turnos/mobile-expo/
 ```
 
-## 🚀 Para Mover a un Repositorio Separado
+## ✅ Repositorio Separado
 
-Si quieres tener la app en un repositorio Git independiente, sigue estos pasos:
+La app móvil ya está en su propio repositorio Git independiente:
+- **Repositorio**: https://github.com/arieljarovisky/arja-erp-mobile.git
+- **Estado**: Activo y actualizado
 
 ### Opción 1: Crear un Nuevo Repositorio Git
 
