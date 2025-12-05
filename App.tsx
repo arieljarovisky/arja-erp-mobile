@@ -13,6 +13,9 @@ import {
   ScrollView,
   Platform,
   StatusBar,
+  TextInput,
+  KeyboardAvoidingView,
+  useColorScheme,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -35,20 +38,91 @@ const getRedirectUri = () => {
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
 
+// Componente de Logo ARJA ERP
+function ArjaLogo({ size = 80, isDark = false }: { size?: number; isDark?: boolean }) {
+  const logoSize = size;
+  const iconSize = logoSize * 0.85;
+  
+  const primaryColor = isDark ? '#4FD4E4' : ARJA_PRIMARY_START;
+  const secondaryColor = isDark ? '#46C5E6' : ARJA_PRIMARY_END;
+  const bgColor = isDark ? 'rgba(7, 23, 36, 0.96)' : '#ffffff';
+  const borderColor = isDark ? 'rgba(79, 212, 228, 0.28)' : 'rgba(19, 181, 207, 0.16)';
+  
+  return (
+    <View style={[
+      styles.logoWrapper, 
+      { 
+        width: logoSize, 
+        height: logoSize,
+        backgroundColor: bgColor,
+        borderRadius: logoSize * 0.22,
+        borderWidth: 1,
+        borderColor: borderColor,
+        shadowColor: isDark ? '#053968' : ARJA_PRIMARY_START,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: isDark ? 0.36 : 0.15,
+        shadowRadius: 12,
+        elevation: 6,
+      }
+    ]}>
+      <View style={[styles.logoIconContainer, { width: iconSize, height: iconSize }]}>
+        {/* Letra A estilizada con gradiente simulado */}
+        <View style={styles.logoA}>
+          <Text style={[
+            styles.logoAText, 
+            { 
+              fontSize: iconSize * 0.55, 
+              color: primaryColor,
+              fontWeight: '700',
+            }
+          ]}>
+            A
+          </Text>
+        </View>
+        {/* Engranaje en la esquina */}
+        <View style={[
+          styles.logoGear, 
+          { 
+            right: -iconSize * 0.1, 
+            top: iconSize * 0.35,
+            width: iconSize * 0.25,
+            height: iconSize * 0.25,
+          }
+        ]}>
+          <Text style={{ 
+            fontSize: iconSize * 0.2, 
+            color: secondaryColor,
+            opacity: 0.9,
+          }}>
+            ⚙
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // Pantalla de login para CLIENTES con OAuth
 function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const [loading, setLoading] = useState(false);
   const [oAuthLoading, setOAuthLoading] = useState(false);
+  const [showTenantSelection, setShowTenantSelection] = useState(false);
+  const [tenantCode, setTenantCode] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingName, setPendingName] = useState('');
 
   // Manejar login con Google OAuth
   const handleGoogleOAuth = async () => {
     setOAuthLoading(true);
     try {
       const redirectUri = getRedirectUri();
+      const appDeepLink = 'arja-erp://oauth/callback'; // Deep link de la app
       
-      // Obtener la URL de autorización del backend con el redirect URI de la app
+      // Obtener la URL de autorización del backend con el redirect URI del backend y el deep link de la app
       const authUrlResponse = await fetch(
-        `${API_BASE_URL}/api/public/customer/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}`,
+        `${API_BASE_URL}/api/public/customer/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}&app_deep_link=${encodeURIComponent(appDeepLink)}`,
         {
           method: 'GET',
           headers: {
@@ -64,10 +138,11 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
         return;
       }
 
-      // Abrir el navegador para autenticación con el redirect URI de la app
+      // Abrir el navegador para autenticación con el redirect URI del backend
+      // Pero esperamos recibir el código en el deep link de la app
       const result = await WebBrowser.openAuthSessionAsync(
         authUrlData.authUrl,
-        redirectUri
+        appDeepLink // Usar el deep link de la app para capturar la redirección
       );
 
       if (result.type === 'success' && result.url) {
@@ -133,10 +208,42 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
         }
       );
 
-      const data = await response.json();
+      let data;
+      try {
+        const responseText = await response.text();
+        console.log('[OAuth] Respuesta del servidor (texto):', responseText);
+        data = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('[OAuth] Error parseando JSON:', jsonError);
+        Alert.alert('Error', 'Error al procesar la respuesta del servidor');
+        return;
+      }
+      
+      console.log('[OAuth] Respuesta del backend (JSON):', JSON.stringify(data, null, 2));
+      console.log('[OAuth] Status code:', response.status);
+      console.log('[OAuth] data.ok:', data.ok);
+      console.log('[OAuth] data.errorCode:', data.errorCode);
+      console.log('[OAuth] data.needsTenantSelection:', data.needsTenantSelection);
 
       if (!data.ok) {
-        if (data.errorCode === 'CUSTOMER_NOT_FOUND') {
+        console.log('[OAuth] Error detectado:', {
+          errorCode: data.errorCode,
+          needsTenantSelection: data.needsTenantSelection,
+          email: data.email,
+          name: data.name,
+        });
+        
+        if ((data.errorCode === 'CUSTOMER_NOT_FOUND' || data.errorCode === 'NO_TENANTS_FOUND') && data.needsTenantSelection) {
+          console.log('[OAuth] ✅ Usuario no asociado a ningún negocio, mostrando pantalla para ingresar código');
+          console.log('[OAuth] Email:', data.email);
+          console.log('[OAuth] Name:', data.name);
+          // Usuario no está asociado a ningún negocio - mostrar pantalla para ingresar código
+          setPendingEmail(data.email || '');
+          setPendingName(data.name || '');
+          setShowTenantSelection(true);
+          setLoading(false);
+          return;
+        } else if (data.errorCode === 'CUSTOMER_NOT_FOUND') {
           Alert.alert(
             'Cuenta no encontrada',
             'No se encontró una cuenta asociada a este email. Por favor, registrate primero en el negocio.'
@@ -159,8 +266,8 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
         return;
       }
 
-      // Si hay un solo tenant o datos directos
-      if (data.data) {
+      // Si hay un solo tenant o datos directos - el usuario ya está asociado a un negocio
+      if (data.data && data.data.tenant_id) {
         const customerData = {
           customerId: data.data.customer_id,
           tenantId: data.data.tenant_id,
@@ -171,14 +278,85 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
           dni: data.data.dni,
         };
 
+        // Usuario ya está asociado a un negocio - hacer login directo
         await AsyncStorage.setItem('customer_data', JSON.stringify(customerData));
         await AsyncStorage.setItem('customer_id', String(data.data.customer_id));
         await AsyncStorage.setItem('tenant_id', String(data.data.tenant_id));
+        // Guardar también el código del negocio si existe
+        if (data.data.tenant_slug) {
+          await AsyncStorage.setItem('tenant_code', data.data.tenant_slug);
+        }
         onLogin(customerData);
+        return;
       }
     } catch (error: any) {
       console.error('Error intercambiando código:', error);
       Alert.alert('Error', 'Error al obtener datos del cliente');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Registrar cliente nuevo con código de negocio
+  const handleRegisterWithTenant = async () => {
+    if (!tenantCode.trim()) {
+      Alert.alert('Error', 'Por favor, ingresá el código del negocio');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/public/customer/oauth/register`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: pendingEmail,
+            tenant_code: tenantCode.trim(),
+            name: pendingName,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        Alert.alert('Error', data.error || 'Error al registrarse');
+        return;
+      }
+
+      // Cliente registrado exitosamente
+      const customerData = {
+        customerId: data.data.customer_id,
+        tenantId: data.data.tenant_id,
+        tenantName: data.data.tenant_name,
+        name: data.data.name,
+        phone: data.data.phone,
+        email: data.data.email,
+        dni: data.data.dni,
+      };
+
+      // Guardar datos del cliente y el tenant_id
+      await AsyncStorage.setItem('customer_data', JSON.stringify(customerData));
+      await AsyncStorage.setItem('customer_id', String(data.data.customer_id));
+      await AsyncStorage.setItem('tenant_id', String(data.data.tenant_id));
+      // Guardar también el código del negocio para futuras sesiones
+      if (data.data.tenant_slug) {
+        await AsyncStorage.setItem('tenant_code', data.data.tenant_slug);
+      } else if (tenantCode.trim()) {
+        // Si no hay tenant_slug, guardar el código que ingresó el usuario
+        await AsyncStorage.setItem('tenant_code', tenantCode.trim());
+      }
+      
+      setShowTenantSelection(false);
+      setTenantCode('');
+      onLogin(customerData);
+    } catch (error: any) {
+      console.error('Error registrando cliente:', error);
+      Alert.alert('Error', 'Error al registrarse. Intentá nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -225,45 +403,127 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
     }
   };
 
-  return (
-    <View style={styles.loginContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <ScrollView
-        contentContainerStyle={styles.loginContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>AR</Text>
-          </View>
-          <Text style={styles.appName}>ARJA ERP</Text>
-        </View>
-
-        <Text style={styles.welcomeTitle}>¡Bienvenido! 👋</Text>
-        <Text style={styles.welcomeSubtitle}>
-          Ingresá con tu cuenta de Google para acceder a tus turnos y servicios
-        </Text>
-
-        <TouchableOpacity
-          style={[styles.googleButton, (loading || oAuthLoading) && styles.buttonDisabled]}
-          onPress={handleGoogleOAuth}
-          disabled={loading || oAuthLoading}
-          activeOpacity={0.8}
+  // Pantalla de selección de negocio para registro
+  if (showTenantSelection) {
+    return (
+      <View style={[styles.loginContainer, isDark && styles.loginContainerDark]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0e1c2c" : "#f5f9fc"} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.loginWrapper}
         >
-          {(loading || oAuthLoading) ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Text style={styles.googleButtonEmoji}>🔐</Text>
-              <Text style={styles.googleButtonText}>Ingresar con Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
+          <ScrollView
+            contentContainerStyle={styles.loginContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.logoContainer}>
+              <ArjaLogo size={80} isDark={isDark} />
+              <Text style={[styles.appName, isDark && styles.appNameDark]}>ARJA ERP</Text>
+            </View>
 
-        <Text style={styles.helpText}>
-          El sistema identificará automáticamente tu negocio según tu email
-        </Text>
-      </ScrollView>
+            <View style={styles.formContainer}>
+              <Text style={[styles.welcomeTitle, isDark && styles.welcomeTitleDark]}>
+                {pendingName ? `Hola ${pendingName}!` : 'Ingresá el código de tu negocio'}
+              </Text>
+              <Text style={[styles.welcomeSubtitle, isDark && styles.welcomeSubtitleDark]}>
+                Ingresá el código del negocio para continuar. Quedará guardado para futuras sesiones.
+              </Text>
+
+              <View style={styles.inputContainer}>
+                <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Código del negocio</Text>
+                <TextInput
+                  style={[styles.input, isDark && styles.inputDark]}
+                  placeholder="Ej: gimnasio-abc o 123"
+                  placeholderTextColor={isDark ? "#6b7280" : "#999"}
+                  value={tenantCode}
+                  onChangeText={setTenantCode}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryButton, loading && styles.buttonDisabled]}
+                onPress={handleRegisterWithTenant}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Continuar</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => {
+                  setShowTenantSelection(false);
+                  setTenantCode('');
+                  setPendingEmail('');
+                  setPendingName('');
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.backButtonText, isDark && styles.backButtonTextDark]}>Volver</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.loginContainer, isDark && styles.loginContainerDark]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0e1c2c" : "#f5f9fc"} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.loginWrapper}
+      >
+        <ScrollView
+          contentContainerStyle={styles.loginContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.logoContainer}>
+            <ArjaLogo size={80} isDark={isDark} />
+            <Text style={[styles.appName, isDark && styles.appNameDark]}>ARJA ERP</Text>
+            <Text style={[styles.appTagline, isDark && styles.appTaglineDark]}>Gestión Empresarial Inteligente</Text>
+          </View>
+
+          <View style={styles.formContainer}>
+            <Text style={[styles.welcomeTitle, isDark && styles.welcomeTitleDark]}>Iniciar sesión</Text>
+            <Text style={[styles.welcomeSubtitle, isDark && styles.welcomeSubtitleDark]}>
+              Ingresá con tu cuenta de Google para continuar
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.googleButton, 
+                isDark && styles.googleButtonDark,
+                (loading || oAuthLoading) && styles.buttonDisabled
+              ]}
+              onPress={handleGoogleOAuth}
+              disabled={loading || oAuthLoading}
+              activeOpacity={0.8}
+            >
+              {(loading || oAuthLoading) ? (
+                <ActivityIndicator color={isDark ? "#fff" : "#374151"} size="small" />
+              ) : (
+                <>
+                  <View style={styles.googleIconContainer}>
+                    <Text style={styles.googleIcon}>G</Text>
+                  </View>
+                  <Text style={[styles.googleButtonText, isDark && styles.googleButtonTextDark]}>Continuar con Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -431,95 +691,203 @@ const styles = StyleSheet.create({
   // Login
   loginContainer: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f5f9fc',
+  },
+  loginContainerDark: {
+    backgroundColor: '#0e1c2c',
+  },
+  loginWrapper: {
+    flex: 1,
   },
   loginContent: {
     flexGrow: 1,
     padding: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 80 : 60,
     paddingBottom: 40,
     justifyContent: 'center',
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 56,
   },
-  logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#ffffff',
+  logoWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: ARJA_PRIMARY_START,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 3,
-    borderColor: ARJA_PRIMARY_START,
   },
-  logoText: {
-    fontSize: 42,
-    fontWeight: 'bold',
-    color: ARJA_PRIMARY_START,
-    letterSpacing: 2,
+  logoIconContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoA: {
+    position: 'relative',
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoAText: {
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  logoGear: {
+    position: 'absolute',
+    zIndex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   appName: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    letterSpacing: 1,
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#051420',
+    letterSpacing: 0.5,
+    marginTop: 8,
+  },
+  appNameDark: {
+    color: '#e6f2f8',
+  },
+  appTagline: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#1c8fa6',
+    letterSpacing: 1.2,
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  appTaglineDark: {
+    color: '#8cd9e9',
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   welcomeTitle: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 12,
+    fontSize: 28,
+    fontWeight: '600',
+    color: '#051420',
+    marginBottom: 8,
     textAlign: 'center',
+  },
+  welcomeTitleDark: {
+    color: '#e6f2f8',
   },
   welcomeSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 48,
+    fontSize: 14,
+    color: '#385868',
+    marginBottom: 32,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
     paddingHorizontal: 8,
   },
+  welcomeSubtitleDark: {
+    color: '#90acbc',
+  },
   googleButton: {
-    backgroundColor: '#4285F4',
-    paddingVertical: 18,
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    shadowColor: '#4285F4',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.32,
-    shadowRadius: 12,
-    elevation: 6,
+    borderWidth: 1.5,
+    borderColor: '#d2d8e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  googleButtonEmoji: {
-    fontSize: 24,
+  googleButtonDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: '#2c4a5f',
+  },
+  googleIconContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
-  googleButtonText: {
+  googleIcon: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  helpText: {
-    textAlign: 'center',
-    color: '#999',
     fontSize: 12,
-    lineHeight: 18,
-    paddingHorizontal: 20,
+    fontWeight: 'bold',
+  },
+  googleButtonText: {
+    color: '#374151',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  googleButtonTextDark: {
+    color: '#e6f2f8',
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#051420',
+    marginBottom: 8,
+  },
+  inputLabelDark: {
+    color: '#e6f2f8',
+  },
+  input: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#d2d8e0',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#051420',
+    minHeight: 50,
+  },
+  inputDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: '#2c4a5f',
+    color: '#e6f2f8',
+  },
+  primaryButton: {
+    backgroundColor: ARJA_PRIMARY_START,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: ARJA_PRIMARY_START,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  backButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  backButtonText: {
+    color: '#385868',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  backButtonTextDark: {
+    color: '#90acbc',
   },
 
   // Home
