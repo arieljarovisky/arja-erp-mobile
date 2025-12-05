@@ -70,23 +70,39 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
 
       if (result.type === 'success' && result.url) {
         // Extraer el código de la URL de respuesta
-        const url = new URL(result.url);
-        const code = url.searchParams.get('code');
-        const error = url.searchParams.get('error');
+        try {
+          const url = new URL(result.url);
+          const code = url.searchParams.get('code');
+          const error = url.searchParams.get('error');
+          const errorDescription = url.searchParams.get('error_description');
 
-        if (error) {
-          Alert.alert('Error', 'Error al autenticarse con Google');
-          return;
-        }
+          if (error) {
+            Alert.alert(
+              'Error de Autenticación',
+              errorDescription || `Error: ${error}\n\nVerificá que el redirect URI esté configurado en Google Cloud Console.`
+            );
+            console.error('[OAuth] Error en la URL:', { error, errorDescription, url: result.url });
+            return;
+          }
 
-        if (code) {
+          if (!code) {
+            Alert.alert('Error', 'No se recibió código de autorización. Intentá nuevamente.');
+            console.error('[OAuth] No se encontró código en la URL:', result.url);
+            return;
+          }
+
+          console.log('[OAuth] Código recibido, intercambiando...');
           // Intercambiar código por datos del cliente
           await exchangeCodeForCustomerData(code, redirectUri);
-        } else {
-          Alert.alert('Error', 'No se recibió código de autorización');
+        } catch (urlError: any) {
+          console.error('[OAuth] Error parseando URL:', urlError, result.url);
+          Alert.alert('Error', 'Error al procesar la respuesta de Google. Intentá nuevamente.');
         }
       } else if (result.type === 'cancel') {
         console.log('OAuth cancelado por el usuario');
+      } else {
+        console.error('[OAuth] Resultado inesperado:', result);
+        Alert.alert('Error', 'No se pudo completar la autenticación. Intentá nuevamente.');
       }
     } catch (error: any) {
       console.error('Error en OAuth:', error);
@@ -124,7 +140,10 @@ function CustomerLoginScreen({ onLogin }: { onLogin: (customerData: any) => void
             'No se encontró una cuenta asociada a este email. Por favor, registrate primero en el negocio.'
           );
         } else {
-          Alert.alert('Error', data.error || 'Error al autenticarse');
+          const errorMessage = data.error || 'Error al autenticarse';
+          const errorDetails = data.errorDetails ? `\n\nDetalles: ${data.errorDetails}` : '';
+          Alert.alert('Error de Autenticación', errorMessage + errorDetails);
+          console.error('[OAuth] Error del backend:', data);
         }
         return;
       }
