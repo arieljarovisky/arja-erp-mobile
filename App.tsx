@@ -22,12 +22,14 @@ import Constants from 'expo-constants';
 // Cerrar el navegador después de la autenticación
 WebBrowser.maybeCompleteAuthSession();
 
-// Obtener el redirect URI para OAuth (deep link)
-const getRedirectUri = () => {
-  return Linking.createURL('/oauth/callback');
-};
-
 const API_BASE_URL = 'https://backend-production-1042.up.railway.app';
+
+// Obtener el redirect URI para OAuth
+// Usamos el callback del backend (que ya está en Google Cloud Console)
+// NO necesitamos agregar arja-erp://oauth/callback porque Google no lo acepta
+const getRedirectUri = () => {
+  return `${API_BASE_URL}/api/public/customer/oauth/google/callback`;
+};
 
 // Colores ARJA ERP
 const ARJA_PRIMARY_START = '#13b5cf';
