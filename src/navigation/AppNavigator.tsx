@@ -9,6 +9,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuthStore } from '../store/useAuthStore';
+import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../utils/useAppTheme';
 import { HomeIcon, BellIcon, QRCodeIcon, CreditCardIcon, CalendarIcon } from '../components/Icons';
 
@@ -19,6 +20,9 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import QRScreen from '../screens/QRScreen';
 import MembershipsScreen from '../screens/MembershipsScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
+import RoutinesScreen from '../screens/RoutinesScreen';
+import CoursesScreen from '../screens/CoursesScreen';
+import TenantNotFoundScreen from '../screens/TenantNotFoundScreen';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 
@@ -131,6 +135,7 @@ function MainTabs() {
 
 export default function AppNavigator() {
   const { isAuthenticated, checkAuth } = useAuthStore();
+  const { tenantNotFound } = useTenantStore();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -151,6 +156,11 @@ export default function AppNavigator() {
   // CRÍTICO: Asegurar que isAuthenticated sea SIEMPRE un boolean válido
   // Usar ?? false para manejar undefined/null, luego Boolean() para asegurar tipo
   const authStatus = Boolean(isAuthenticated ?? false);
+  
+  // Log para debugging
+  useEffect(() => {
+    console.log('[AppNavigator] Estado de autenticación:', { isAuthenticated, authStatus, tenantNotFound });
+  }, [isAuthenticated, authStatus, tenantNotFound]);
 
   // Mostrar loading mientras se verifica la autenticación
   // Nunca retornar null, siempre retornar un componente válido
@@ -163,11 +173,27 @@ export default function AppNavigator() {
     );
   }
 
+  // Si el tenant no existe y el usuario está autenticado, mostrar pantalla de error
+  if (authStatus && tenantNotFound) {
+    console.log('[AppNavigator] Mostrando pantalla TenantNotFound - authStatus:', authStatus, 'tenantNotFound:', tenantNotFound);
+    return (
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="TenantNotFound" component={TenantNotFoundScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   // CRÍTICO: initialRouteName debe ser un string válido, nunca undefined
   const initialRoute = authStatus ? 'Main' : 'Login';
 
+  // Usar key para forzar re-render cuando cambie el estado de autenticación
+  // Esto asegura que el navegador se reinicialice con la ruta correcta
+  const navigationKey = authStatus ? 'authenticated' : 'unauthenticated';
+
   return (
-    <NavigationContainer>
+    <NavigationContainer key={navigationKey}>
       <Stack.Navigator 
         screenOptions={{ headerShown: false }}
         initialRouteName={initialRoute}
@@ -188,6 +214,34 @@ export default function AppNavigator() {
           headerShown: false,
           // ⚠️ RN19 + Fabric: NO usar gestureEnabled, animationEnabled, animationTypeForReplace,
           // presentation, fullScreenGestureEnabled, replaceAnimation, cardStyleInterpolator, cardShadowEnabled
+        }}
+      />
+      <Stack.Screen 
+        name="Routines" 
+        component={RoutinesScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="Classes" 
+        component={CoursesScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="Appointments" 
+        component={AppointmentsScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="TenantNotFound" 
+        component={TenantNotFoundScreen}
+        options={{ 
+          headerShown: false,
         }}
       />
       </Stack.Navigator>

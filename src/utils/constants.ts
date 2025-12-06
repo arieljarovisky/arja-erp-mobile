@@ -4,7 +4,7 @@
 
 // URL del backend
 export const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000' // Desarrollo local
+  ? 'https://backend-production-1042.up.railway.app' // Usando backend de producción
   : 'https://backend-production-1042.up.railway.app'; // Producción
 
 // Colores de la app

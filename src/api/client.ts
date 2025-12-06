@@ -5,8 +5,14 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL del backend - cambiar según el ambiente
+// IMPORTANTE: En desarrollo móvil, usar la IP de tu máquina en la red local (no localhost)
+// Para obtener tu IP local en Windows: ipconfig (buscar "IPv4 Address")
+// Para obtener tu IP local en Mac/Linux: ifconfig o ip addr
+// El backend corre en el puerto 4000 según los logs
+// Si estás usando un emulador Android, puedes usar 'http://10.0.2.2:4000'
+// Si estás usando un emulador iOS, puedes usar 'http://localhost:4000'
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000' // Desarrollo local
+  ? 'https://backend-production-1042.up.railway.app' // Usando backend de producción
   : 'https://backend-production-1042.up.railway.app'; // Producción
 
 const apiClient: AxiosInstance = axios.create({
@@ -31,6 +37,10 @@ apiClient.interceptors.request.use(
       if (tenantId && config.params) {
         config.params.tenant_id = tenantId;
       }
+      
+      // Log de la URL completa para debugging
+      const fullURL = `${config.baseURL}${config.url}`;
+      console.log(`[API Client] Request: ${config.method?.toUpperCase()} ${fullURL}`);
     } catch (error) {
       console.error('[API Client] Error obteniendo token:', error);
     }

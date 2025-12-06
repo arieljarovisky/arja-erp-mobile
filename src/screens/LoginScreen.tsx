@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/useAuthStore';
 import { ArjaLogo } from '../components/ArjaLogo';
 import { useAppTheme } from '../utils/useAppTheme';
@@ -138,6 +139,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           customerName: data.data.name || null,
           phone: data.data.phone || null,
         };
+
+        // Guardar el token si viene en la respuesta
+        if (data.data.access_token) {
+          await AsyncStorage.setItem('auth_token', data.data.access_token);
+          console.log('[LoginScreen] Token guardado en AsyncStorage');
+        }
 
         setAuth(customerData);
         // La navegación se manejará automáticamente por el useEffect en AppNavigator

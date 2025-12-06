@@ -1,7 +1,7 @@
 /**
  * Pantalla Principal / Home con estilos ARJA ERP
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,13 @@ import {
   StatusBar,
   RefreshControl,
   Alert,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/useAuthStore';
+import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../utils/useAppTheme';
-import { CalendarIcon, PlusIcon, ClassesIcon, CreditCardIcon, UserIcon } from '../components/Icons';
+import { CalendarIcon, PlusIcon, ClassesIcon, CreditCardIcon, UserIcon, RoutinesIcon } from '../components/Icons';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
@@ -27,8 +29,17 @@ interface HomeScreenProps {
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { isDark } = useAppTheme();
-  const { customerName, phone, tenantId } = useAuthStore();
+  const { customerName, phone, tenantId, clearAuth } = useAuthStore();
+  const { loadFeatures, clearFeatures } = useTenantStore();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Cargar features del tenant al montar
+  React.useEffect(() => {
+    if (tenantId) {
+      loadFeatures(tenantId);
+    }
+  }, [tenantId, loadFeatures]);
   
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -43,6 +54,35 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       setRefreshing(false);
     }
   }, []);
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Estás seguro que querés cerrar sesión?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+          onPress: () => setShowProfileMenu(false),
+        },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearAuth();
+              await clearFeatures();
+              setShowProfileMenu(false);
+              // La navegación se manejará automáticamente por el AppNavigator
+            } catch (error) {
+              console.error('Error al cerrar sesión:', error);
+              Alert.alert('Error', 'No se pudo cerrar sesión. Intentá nuevamente.');
+            }
+          },
+        },
+      ]
+    );
+  };
   
   return (
     <View style={[styles.homeContainer, isDark && styles.homeContainerDark]}>
@@ -80,6 +120,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               <TouchableOpacity 
                 style={[styles.profileButton, isDark && styles.profileButtonDark]}
                 activeOpacity={0.7}
+                onPress={() => setShowProfileMenu(true)}
               >
                 <UserIcon size={20} color={isDark ? '#e6f2f8' : '#ffffff'} />
               </TouchableOpacity>
@@ -91,12 +132,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         <View style={styles.sectionContainer}>
           <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Acciones rápidas</Text>
           <View style={styles.menuGrid}>
+            {/* Las tarjetas se muestran siempre, pero las pantallas verifican las features internamente */}
             {/* Mis Turnos */}
             <TouchableOpacity 
               style={styles.menuCard} 
               activeOpacity={0.8}
               onPress={() => {
-                navigation.navigate('Appointments');
+                // Navegar directamente al tab de Turnos
+                navigation.navigate('Turnos');
               }}
             >
               <LinearGradient
@@ -168,7 +211,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               style={styles.menuCard} 
               activeOpacity={0.8}
               onPress={() => {
-                navigation.navigate('Memberships');
+                // Navegar directamente al tab de Membresías
+                navigation.navigate('Membresías');
               }}
             >
               <LinearGradient
@@ -186,10 +230,77 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 </View>
               </LinearGradient>
             </TouchableOpacity>
+
+            {/* Rutinas */}
+            <TouchableOpacity 
+              style={styles.menuCard} 
+              activeOpacity={0.8}
+              onPress={() => {
+                navigation.navigate('Routines');
+              }}
+            >
+              <LinearGradient
+                colors={['#8b5cf6', '#7c3aed']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardGradient}
+              >
+                <View style={styles.cardGradientOverlay}>
+                  <View style={[styles.cardIcon, styles.iconWhite]}>
+                    <RoutinesIcon size={28} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.cardTitleWhite]}>Rutinas</Text>
+                  <Text style={[styles.cardDescription, styles.cardDescriptionWhite]}>Mis rutinas</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
         </ScrollView>
       </View>
+
+      {/* Modal de menú de perfil */}
+      <Modal
+        visible={showProfileMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowProfileMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowProfileMenu(false)}
+        >
+          <View style={[styles.profileMenu, isDark && styles.profileMenuDark]}>
+            <View style={[styles.profileMenuHeader, isDark && { borderBottomColor: '#2c4a5f' }]}>
+              <Text style={[styles.profileMenuTitle, isDark && styles.profileMenuTitleDark]}>
+                {customerName || phone || 'Usuario'}
+              </Text>
+              <Text style={[styles.profileMenuSubtitle, isDark && styles.profileMenuSubtitleDark]}>
+                {phone || 'Sin teléfono'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.profileMenuButton, styles.logoutButton]}
+              onPress={handleLogout}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.profileMenuButton, styles.cancelButton, isDark && styles.cancelButtonDark]}
+              onPress={() => setShowProfileMenu(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cancelButtonText, isDark && styles.cancelButtonTextDark]}>
+                Cancelar
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -300,11 +411,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 12,
+    marginBottom: 12,
   },
   menuCard: {
     width: '48%',
     borderRadius: 20,
-    marginBottom: 0,
+    marginBottom: 12,
     overflow: 'hidden',
     shadowColor: ARJA_PRIMARY_START,
     shadowOffset: { width: 0, height: 4 },
@@ -354,5 +466,79 @@ const styles = StyleSheet.create({
   },
   cardDescriptionWhite: {
     color: 'rgba(255, 255, 255, 0.9)',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  profileMenu: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  profileMenuDark: {
+    backgroundColor: '#1e2f3f',
+  },
+  profileMenuHeader: {
+    marginBottom: 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  profileMenuTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#051420',
+    marginBottom: 4,
+  },
+  profileMenuTitleDark: {
+    color: '#e6f2f8',
+  },
+  profileMenuSubtitle: {
+    fontSize: 14,
+    color: '#385868',
+  },
+  profileMenuSubtitleDark: {
+    color: '#90acbc',
+  },
+  profileMenuButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  logoutButton: {
+    backgroundColor: '#FF3B30',
+  },
+  logoutButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#d2d8e0',
+  },
+  cancelButtonDark: {
+    borderColor: '#2c4a5f',
+  },
+  cancelButtonText: {
+    color: '#385868',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  cancelButtonTextDark: {
+    color: '#90acbc',
   },
 });

@@ -36,6 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   phone: null,
 
   setAuth: (data: StoreAuthData) => {
+    console.log('[AuthStore] setAuth llamado con:', { customerId: data.customerId, tenantId: data.tenantId });
     // Guardar en AsyncStorage manualmente
     AsyncStorage.setItem('customer_id', String(data.customerId || ''));
     AsyncStorage.setItem('tenant_id', String(data.tenantId || ''));
@@ -54,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       customerName: data.customerName || null,
       phone: data.phone || null,
     });
+    console.log('[AuthStore] Estado actualizado - isAuthenticated: true');
   },
 
   clearAuth: async () => {
