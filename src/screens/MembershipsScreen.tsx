@@ -22,6 +22,8 @@ import { CreditCardIcon, CalendarIcon } from '../components/Icons';
 import { membershipsAPI, MembershipPlan, MembershipSubscription } from '../api/memberships';
 import { format, parseISO, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale/es';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from '../services/auth';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
@@ -62,26 +64,38 @@ export default function MembershipsScreen({ navigation }: any) {
     try {
       const [plansData, subscriptionData] = await Promise.all([
         membershipsAPI.getPlans(tenantId),
-        membershipsAPI.getMyMembership(customerId, tenantId),
+        membershipsAPI.getMyMembership(customerId, tenantId).catch(err => {
+          // Si es 404, es normal (no tiene membresía activa)
+          if (err.response?.status === 404) {
+            return null;
+          }
+          throw err;
+        }),
       ]);
       setPlans(plansData);
       setSubscription(subscriptionData);
     } catch (error: any) {
-      // Solo mostrar alerta si es un error del servidor (no error de red)
-      // Los errores de red (Network Error) son comunes en desarrollo y no necesitan alerta
-      if (error.response && error.response.status !== 404) {
-        // Error del servidor con respuesta
-        console.error('Error cargando membresías:', error);
-        Alert.alert('Error', 'No se pudieron cargar las membresías');
+      // Manejar diferentes tipos de errores
+      if (error.response?.status === 403) {
+        // Error 403 - Permisos denegados
+        console.error('Error 403 - Acceso denegado:', error.response?.data);
+        // Puede ser que el backend no esté actualizado
+        Alert.alert(
+          'Acceso denegado',
+          'No tenés permisos para acceder a las membresías. Esto puede indicar que el servidor necesita actualizarse.'
+        );
+      } else if (error.response && error.response.status !== 404) {
+        // Error del servidor con respuesta (excepto 404)
+        console.error('Error cargando membresías:', error.response?.status, error.response?.data);
+        Alert.alert('Error', `No se pudieron cargar las membresías: ${error.response?.data?.error || error.message}`);
       } else if (!error.response && error.code !== 'ECONNABORTED') {
-        // Error de red pero no timeout - solo loguear como info, no como error
-        // El usuario verá el estado vacío que es más amigable
+        // Error de red pero no timeout
         console.log('Backend no disponible - mostrando estado vacío de membresías');
       } else {
-        // 404 u otros errores esperados - solo loguear como info
+        // 404 u otros errores esperados
         console.log('No hay membresías disponibles');
       }
-      // Si es 404 o error de red, simplemente dejamos los estados vacíos
+      // Dejar los estados vacíos en caso de error
       setPlans([]);
       setSubscription(null);
     } finally {
@@ -110,12 +124,31 @@ export default function MembershipsScreen({ navigation }: any) {
           onPress: async () => {
             try {
               setLoadingPayment(true);
-              // Necesitaríamos el email del usuario, por ahora usamos un placeholder
-              const email = 'usuario@example.com'; // TODO: Obtener email del usuario
+              
+              // Obtener email del usuario
+              let email: string | undefined;
+              try {
+                // Intentar obtener del user_data guardado
+                const authData = await authService.getAuthData();
+                if (authData?.user?.email) {
+                  email = authData.user.email;
+                } else {
+                  // Intentar obtener del AsyncStorage directamente
+                  const userDataStr = await AsyncStorage.getItem('user_data');
+                  if (userDataStr) {
+                    const userData = JSON.parse(userDataStr);
+                    email = userData.email;
+                  }
+                }
+              } catch (error) {
+                console.log('No se pudo obtener el email del usuario:', error);
+              }
+              
+              // Si no tenemos email, intentar sin enviarlo (el backend lo buscará en la BD)
               const result = await membershipsAPI.subscribeToPlan(
                 plan.id,
                 customerId!,
-                email,
+                email || '', // Enviar string vacío si no tenemos email
                 tenantId!
               );
               
@@ -136,10 +169,21 @@ export default function MembershipsScreen({ navigation }: any) {
               }
               await loadData();
             } catch (error: any) {
-              Alert.alert(
-                'Error',
-                error.response?.data?.message || 'No se pudo realizar la suscripción'
-              );
+              console.error('Error en suscripción:', error);
+              console.error('Error response:', error.response?.data);
+              console.error('Error message:', error.message);
+              
+              let errorMessage = 'No se pudo realizar la suscripción';
+              
+              if (error.response?.data?.error) {
+                errorMessage = error.response.data.error;
+              } else if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+              } else if (error.message) {
+                errorMessage = error.message;
+              }
+              
+              Alert.alert('Error', errorMessage);
             } finally {
               setLoadingPayment(false);
             }
@@ -167,6 +211,32 @@ export default function MembershipsScreen({ navigation }: any) {
       }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo generar el link de pago');
+    } finally {
+      setLoadingPayment(false);
+    }
+  };
+
+  const handleRegeneratePaymentLink = async () => {
+    if (!subscription) return;
+
+    try {
+      setLoadingPayment(true);
+      const paymentLink = await membershipsAPI.getPaymentLink(subscription.id, true);
+      const canOpen = await Linking.canOpenURL(paymentLink);
+      if (canOpen) {
+        await Linking.openURL(paymentLink);
+        Alert.alert(
+          'Nuevo link generado',
+          'Se abrió la página de pago. Una vez completado, tu membresía se activará automáticamente.'
+        );
+        // Recargar datos para actualizar el estado
+        await loadData();
+      } else {
+        Alert.alert('Error', 'No se pudo abrir el link de pago');
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.message || 'No se pudo generar el nuevo link de pago';
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoadingPayment(false);
     }
@@ -348,6 +418,19 @@ export default function MembershipsScreen({ navigation }: any) {
               </View>
 
               <View style={styles.subscriptionActions}>
+                {subscription.status.toLowerCase() === 'pending' && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.renewButton]}
+                    onPress={handleRegeneratePaymentLink}
+                    disabled={loadingPayment}
+                  >
+                    {loadingPayment ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.actionButtonText}>Generar nuevo link de pago</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
                 {subscription.status.toLowerCase() === 'active' && subscription.next_charge_at && (
                   <TouchableOpacity
                     style={[styles.actionButton, styles.renewButton]}
@@ -361,7 +444,7 @@ export default function MembershipsScreen({ navigation }: any) {
                     )}
                   </TouchableOpacity>
                 )}
-                {subscription.status.toLowerCase() === 'active' && (
+                {(subscription.status.toLowerCase() === 'active' || subscription.status.toLowerCase() === 'pending') && (
                   <TouchableOpacity
                     style={[styles.actionButton, styles.cancelButton]}
                     onPress={handleCancelMembership}

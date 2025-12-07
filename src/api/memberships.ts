@@ -35,7 +35,21 @@ export const membershipsAPI = {
     const response = await apiClient.get('/api/memberships/plans', {
       params: { tenant_id: tenantId },
     });
-    return response.data;
+    // El backend devuelve { ok: true, data: [...] }
+    if (response.data?.ok && response.data?.data) {
+      // Transformar los datos del backend al formato esperado por el frontend
+      return response.data.data.map((plan: any) => ({
+        id: plan.id,
+        name: plan.name,
+        description: plan.description || '',
+        price: plan.price_decimal || 0,
+        currency: 'ARS',
+        frequency: plan.duration_months || 1,
+        features: plan.features ? (typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features) : [],
+        is_active: plan.is_active === 1 || plan.is_active === true,
+      }));
+    }
+    return response.data?.data || [];
   },
 
   /**
@@ -57,13 +71,51 @@ export const membershipsAPI = {
     email: string,
     tenantId: number
   ): Promise<MembershipSubscription> => {
-    const response = await apiClient.post('/api/memberships/subscribe', {
-      membership_plan_id: planId,
-      customer_id: customerId,
-      payer_email: email,
-      tenant_id: tenantId,
-    });
-    return response.data;
+    try {
+      const response = await apiClient.post('/api/memberships/subscribe', {
+        membership_plan_id: planId,
+        customer_id: customerId,
+        payer_email: email || undefined, // No enviar si está vacío
+        tenant_id: tenantId,
+      });
+      
+      console.log('[MembershipsAPI] Respuesta de suscripción:', response.data);
+      
+      // El backend devuelve { ok: true, data: {...} }
+      if (response.data?.ok && response.data?.data) {
+        const sub = response.data.data;
+        return {
+          id: sub.id,
+          customer_id: sub.customer_id,
+          membership_plan_id: sub.membership_plan_id,
+          status: sub.status,
+          next_charge_at: sub.next_charge_at,
+          last_payment_at: sub.last_payment_at,
+          amount_decimal: sub.amount_decimal,
+          currency: sub.currency,
+          mp_init_point: sub.mp_init_point,
+          plan: sub.plan_name ? {
+            id: sub.membership_plan_id,
+            name: sub.plan_name,
+            description: sub.plan_description || '',
+            price: sub.plan_price || 0,
+            currency: sub.currency,
+            frequency: sub.duration_months || 1,
+            is_active: true,
+          } : undefined,
+        };
+      }
+      
+      // Si la respuesta no tiene el formato esperado, lanzar error con detalles
+      console.error('[MembershipsAPI] Respuesta inesperada:', response.data);
+      throw new Error(`Respuesta inválida del servidor: ${JSON.stringify(response.data)}`);
+    } catch (error: any) {
+      console.error('[MembershipsAPI] Error en subscribeToPlan:', error);
+      if (error.response?.data) {
+        console.error('[MembershipsAPI] Error response data:', error.response.data);
+      }
+      throw error;
+    }
   },
 
   /**
@@ -77,7 +129,30 @@ export const membershipsAPI = {
           tenant_id: tenantId,
         },
       });
-      return response.data;
+      // El backend devuelve { ok: true, data: {...} }
+      if (response.data?.ok && response.data?.data) {
+        const sub = response.data.data;
+        return {
+          id: sub.id,
+          customer_id: sub.customer_id,
+          membership_plan_id: sub.membership_plan_id,
+          status: sub.status,
+          next_charge_at: sub.next_charge_at,
+          last_payment_at: sub.last_payment_at,
+          amount_decimal: sub.amount_decimal,
+          currency: sub.currency,
+          plan: {
+            id: sub.membership_plan_id,
+            name: sub.plan_name,
+            description: sub.plan_description || '',
+            price: sub.plan_price || 0,
+            currency: sub.currency,
+            frequency: sub.duration_months || 1,
+            is_active: true,
+          },
+        };
+      }
+      return null;
     } catch (error: any) {
       if (error.response?.status === 404) {
         return null; // No tiene membresía activa
@@ -89,9 +164,15 @@ export const membershipsAPI = {
   /**
    * Obtener link de pago para renovar membresía
    */
-  getPaymentLink: async (subscriptionId: number): Promise<string> => {
-    const response = await apiClient.get(`/api/memberships/subscriptions/${subscriptionId}/payment-link`);
-    return response.data.payment_link;
+  getPaymentLink: async (subscriptionId: number, regenerate: boolean = false): Promise<string> => {
+    const response = await apiClient.get(`/api/memberships/subscriptions/${subscriptionId}/payment-link`, {
+      params: { regenerate: regenerate ? 'true' : 'false' },
+    });
+    // El backend devuelve { ok: true, data: { payment_link: "..." } }
+    if (response.data?.ok && response.data?.data?.payment_link) {
+      return response.data.data.payment_link;
+    }
+    throw new Error('No se pudo obtener el link de pago');
   },
 
   /**

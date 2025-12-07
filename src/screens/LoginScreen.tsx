@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/useAuthStore';
 import { ArjaLogo } from '../components/ArjaLogo';
@@ -34,6 +35,56 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [loading, setLoading] = useState(false);
   const [oAuthLoading, setOAuthLoading] = useState(false);
   const { setAuth } = useAuthStore();
+
+  // Listener para deep links de OAuth
+  React.useEffect(() => {
+    // Verificar si la app se abrió con un deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log('[LoginScreen] App abierta con deep link:', url);
+        handleDeepLink(url);
+      }
+    });
+
+    // Escuchar deep links mientras la app está abierta
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      console.log('[LoginScreen] Deep link recibido:', url);
+      handleDeepLink(url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Manejar deep link de OAuth
+  const handleDeepLink = async (url: string) => {
+    try {
+      console.log('[LoginScreen] Procesando deep link:', url);
+      const parsedUrl = Linking.parse(url);
+      
+      if (parsedUrl.path === 'oauth/callback' || parsedUrl.hostname === 'oauth' && parsedUrl.path === 'callback') {
+        const code = parsedUrl.queryParams?.code as string;
+        const error = parsedUrl.queryParams?.error as string;
+
+        console.log('[LoginScreen] Código del deep link:', code ? code.substring(0, 20) + '...' : 'NO ENCONTRADO');
+        console.log('[LoginScreen] Error del deep link:', error || 'NINGUNO');
+
+        if (error) {
+          Alert.alert('Error de Autenticación', 'Error al autenticarse con Google');
+          return;
+        }
+
+        if (code) {
+          const redirectUri = getRedirectUri();
+          console.log('[LoginScreen] Intercambiando código del deep link por datos del cliente...');
+          await exchangeCodeForCustomerData(code, redirectUri);
+        }
+      }
+    } catch (error: any) {
+      console.error('[LoginScreen] Error procesando deep link:', error);
+    }
+  };
 
   // Obtener el redirect URI para OAuth
   const getRedirectUri = () => {
@@ -71,11 +122,19 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         appDeepLink
       );
 
+      console.log('[LoginScreen] Resultado de WebBrowser:', result.type, result.url ? result.url.substring(0, 100) : 'sin URL');
+      
       if (result.type === 'success' && result.url) {
         try {
-          const url = new URL(result.url);
-          const code = url.searchParams.get('code');
-          const error = url.searchParams.get('error');
+          console.log('[LoginScreen] URL completa recibida:', result.url);
+          
+          // Usar Linking.parse() para parsear deep links en React Native
+          const parsedUrl = Linking.parse(result.url);
+          const code = parsedUrl.queryParams?.code as string;
+          const error = parsedUrl.queryParams?.error as string;
+
+          console.log('[LoginScreen] Código extraído:', code ? code.substring(0, 20) + '...' : 'NO ENCONTRADO');
+          console.log('[LoginScreen] Error extraído:', error || 'NINGUNO');
 
           if (error) {
             Alert.alert('Error de Autenticación', 'Error al autenticarse con Google');
@@ -83,10 +142,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           }
 
           if (!code) {
+            console.error('[LoginScreen] No se recibió código de autorización. URL completa:', result.url);
+            console.error('[LoginScreen] URL parseada:', JSON.stringify(parsedUrl, null, 2));
             Alert.alert('Error', 'No se recibió código de autorización');
             return;
           }
 
+          console.log('[LoginScreen] Código OAuth recibido, intercambiando por datos del cliente...');
           // Intercambiar código por datos del cliente
           await exchangeCodeForCustomerData(code, redirectUri);
         } catch (urlError: any) {
@@ -110,6 +172,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const exchangeCodeForCustomerData = async (code: string, redirectUri: string) => {
     setLoading(true);
     try {
+      console.log('[LoginScreen] Llamando a exchange-code con:', { code: code.substring(0, 20) + '...', redirectUri });
       const response = await fetch(
         `${API_BASE_URL}/api/public/customer/oauth/exchange-code`,
         {
@@ -124,7 +187,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         }
       );
 
+      console.log('[LoginScreen] Respuesta de exchange-code recibida, status:', response.status);
       const data = await response.json();
+      console.log('[LoginScreen] Datos recibidos de exchange-code:', JSON.stringify(data, null, 2));
 
       if (!data.ok) {
         Alert.alert('Error', data.error || 'Error al autenticarse');
@@ -143,7 +208,14 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         // Guardar el token si viene en la respuesta
         if (data.data.access_token) {
           await AsyncStorage.setItem('auth_token', data.data.access_token);
-          console.log('[LoginScreen] Token guardado en AsyncStorage');
+          console.log('[LoginScreen] Token guardado en AsyncStorage:', data.data.access_token.substring(0, 20) + '...');
+          
+          // Verificar que se guardó correctamente
+          const savedToken = await AsyncStorage.getItem('auth_token');
+          console.log('[LoginScreen] Token verificado después de guardar:', savedToken ? savedToken.substring(0, 20) + '...' : 'NO ENCONTRADO');
+        } else {
+          console.warn('[LoginScreen] No se recibió access_token en la respuesta del backend');
+          console.log('[LoginScreen] Datos recibidos:', JSON.stringify(data.data, null, 2));
         }
 
         setAuth(customerData);

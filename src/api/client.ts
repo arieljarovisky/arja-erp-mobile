@@ -30,6 +30,9 @@ apiClient.interceptors.request.use(
       const token = await AsyncStorage.getItem('auth_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        console.log(`[API Client] Token encontrado y agregado a la petición: ${token.substring(0, 20)}...`);
+      } else {
+        console.log(`[API Client] No se encontró token en AsyncStorage para la petición: ${config.method?.toUpperCase()} ${config.url}`);
       }
       
       // Agregar tenant_id si está disponible
@@ -41,6 +44,7 @@ apiClient.interceptors.request.use(
       // Log de la URL completa para debugging
       const fullURL = `${config.baseURL}${config.url}`;
       console.log(`[API Client] Request: ${config.method?.toUpperCase()} ${fullURL}`);
+      console.log(`[API Client] Headers:`, JSON.stringify(config.headers, null, 2));
     } catch (error) {
       console.error('[API Client] Error obteniendo token:', error);
     }
