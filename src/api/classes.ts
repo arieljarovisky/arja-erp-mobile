@@ -21,6 +21,7 @@ export interface ClassSeries {
   description?: string;
   instructor_id: number;
   instructor_name?: string;
+  first_session_date?: string;
   sessions?: ClassSession[];
 }
 
@@ -37,7 +38,7 @@ export const classesAPI = {
    * Listar clases disponibles (series)
    */
   getClasses: async (tenantId: number): Promise<ClassSeries[]> => {
-    const response = await apiClient.get('/api/classes', {
+    const response = await apiClient.get('/api/public/customer/classes', {
       params: { tenant_id: tenantId },
     });
     return response.data;
@@ -47,17 +48,25 @@ export const classesAPI = {
    * Obtener detalles de una serie de clases
    */
   getClassSeries: async (seriesId: number, tenantId: number): Promise<ClassSeries> => {
-    const response = await apiClient.get(`/api/classes/${seriesId}`, {
-      params: { tenant_id: tenantId },
-    });
-    return response.data;
+    // Para obtener detalles de una serie, usamos las sesiones
+    const sessions = await classesAPI.getClassSessions(seriesId, tenantId);
+    if (sessions.length === 0) {
+      throw new Error('Serie de clases no encontrada');
+    }
+    return {
+      id: seriesId,
+      name: sessions[0].series_name || 'Clase',
+      instructor_id: sessions[0].instructor_id,
+      instructor_name: sessions[0].instructor_name,
+      sessions,
+    };
   },
 
   /**
    * Obtener sesiones disponibles de una serie
    */
   getClassSessions: async (seriesId: number, tenantId: number): Promise<ClassSession[]> => {
-    const response = await apiClient.get(`/api/classes/${seriesId}/sessions`, {
+    const response = await apiClient.get(`/api/public/customer/classes/${seriesId}/sessions`, {
       params: { tenant_id: tenantId },
     });
     return response.data;
@@ -67,7 +76,7 @@ export const classesAPI = {
    * Inscribirse a una clase (sesión)
    */
   enrollToClass: async (sessionId: number, customerId: number, tenantId: number): Promise<ClassEnrollment> => {
-    const response = await apiClient.post(`/api/classes/sessions/${sessionId}/enroll`, {
+    const response = await apiClient.post(`/api/public/customer/classes/sessions/${sessionId}/enroll`, {
       customer_id: customerId,
       tenant_id: tenantId,
     });
@@ -77,11 +86,12 @@ export const classesAPI = {
   /**
    * Ver mis inscripciones a clases
    */
-  getMyEnrollments: async (phone: string, tenantId: number): Promise<ClassEnrollment[]> => {
-    const response = await apiClient.get('/api/classes/enrollments', {
+  getMyEnrollments: async (tenantId: number, opts: { phone?: string; customerId?: number } = {}): Promise<ClassEnrollment[]> => {
+    const response = await apiClient.get('/api/public/customer/classes/enrollments', {
       params: {
-        phone: phone.replace(/\D/g, ''),
         tenant_id: tenantId,
+        ...(opts.phone ? { phone: opts.phone.replace(/\D/g, '') } : {}),
+        ...(opts.customerId ? { customer_id: opts.customerId } : {}),
       },
     });
     return response.data;
@@ -90,8 +100,10 @@ export const classesAPI = {
   /**
    * Cancelar inscripción a clase
    */
-  cancelEnrollment: async (enrollmentId: number): Promise<void> => {
-    await apiClient.delete(`/api/classes/enrollments/${enrollmentId}`);
+  cancelEnrollment: async (enrollmentId: number, tenantId: number): Promise<void> => {
+    await apiClient.delete(`/api/public/customer/classes/enrollments/${enrollmentId}`, {
+      params: { tenant_id: tenantId },
+    });
   },
 };
 

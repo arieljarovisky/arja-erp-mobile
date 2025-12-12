@@ -11,34 +11,137 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../utils/useAppTheme';
-import { HomeIcon, BellIcon, QRCodeIcon, CreditCardIcon, CalendarIcon } from '../components/Icons';
+import { useAppSettingsStore, selectPrimaryColor, selectFeatureFlags } from '../store/useAppSettingsStore';
+import { HomeIcon, BellIcon, QRCodeIcon, CalendarIcon, RoutinesIcon, CoursesIcon } from '../components/Icons';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import QRScreen from '../screens/QRScreen';
-import MembershipsScreen from '../screens/MembershipsScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
+import MembershipsScreen from '../screens/MembershipsScreen';
 import RoutinesScreen from '../screens/RoutinesScreen';
+import CreateWorkoutRoutineScreen from '../screens/CreateWorkoutRoutineScreen';
+import WorkoutRoutineDetailScreen from '../screens/WorkoutRoutineDetailScreen';
+import ExerciseDetailScreen from '../screens/ExerciseDetailScreen';
 import CoursesScreen from '../screens/CoursesScreen';
+import AvailableClassesScreen from '../screens/AvailableClassesScreen';
 import TenantNotFoundScreen from '../screens/TenantNotFoundScreen';
+import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// Stack Navigator para pantallas que necesitan el tab bar visible
+function HomeStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="HomeMain" component={HomeScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function NotificationsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="NotificationsMain" component={NotificationsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function QRStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="QRMain" component={QRScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function RoutinesStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="RoutinesMain" component={RoutinesScreen} />
+      <Stack.Screen name="CreateWorkoutRoutine" component={CreateWorkoutRoutineScreen} />
+      <Stack.Screen name="WorkoutRoutineDetail" component={WorkoutRoutineDetailScreen} />
+      <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function AppointmentsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AppointmentsMain" component={AppointmentsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function ClassesStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ClassesMain" component={CoursesScreen} />
+      <Stack.Screen name="AvailableClasses" component={AvailableClassesScreen} />
+    </Stack.Navigator>
+  );
+}
+
 function MainTabs() {
   const { isDark } = useAppTheme();
   const isDarkMode = Boolean(isDark);
+  const primaryColor = useAppSettingsStore(selectPrimaryColor);
+  const featureFlags = useAppSettingsStore(selectFeatureFlags);
+   const tenantFeatures = useTenantStore(state => state.features);
   
+  const tabs = [
+    {
+      key: 'home',
+      name: 'Inicio',
+      component: HomeStack,
+      icon: HomeIcon,
+      feature: true,
+    },
+    {
+      key: 'notifications',
+      name: 'Notificaciones',
+      component: NotificationsStack,
+      icon: BellIcon,
+      feature: featureFlags.notifications,
+      filled: true,
+    },
+    {
+      key: 'qr',
+      name: 'QRTab',
+      label: ' ',
+      component: QRStack,
+      icon: QRCodeIcon,
+      feature: featureFlags.qr,
+      isQr: true,
+    },
+    {
+      key: 'routines',
+      name: 'Rutinas',
+      component: RoutinesStack,
+      icon: RoutinesIcon,
+      feature: featureFlags.routines && (tenantFeatures?.has_routines ?? true),
+    },
+    {
+      key: 'appointments',
+      name: 'Turnos',
+      component: AppointmentsStack,
+      icon: CalendarIcon,
+      feature: true,
+    },
+  ].filter(t => t.feature);
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: true, // Por defecto, todos los tabs muestran label
-        tabBarActiveTintColor: ARJA_PRIMARY_START,
+        tabBarShowLabel: true,
+        tabBarActiveTintColor: primaryColor,
         tabBarInactiveTintColor: isDarkMode ? '#90acbc' : '#666',
         tabBarStyle: {
           backgroundColor: isDarkMode ? '#1e2f3f' : '#ffffff',
@@ -54,81 +157,38 @@ function MainTabs() {
         },
       }}
     >
-      <Tab.Screen
-        name="Inicio"
-        component={HomeScreen}
-        options={{
-          tabBarShowLabel: true,
-          tabBarIcon: ({ focused, color, size }) => {
-            const iconSize = typeof size === 'number' ? size : 24;
-            const isFocused = Boolean(focused);
-            return <HomeIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} filled={isFocused} />;
-          },
-        }}
-      />
-      
-      <Tab.Screen
-        name="Notificaciones"
-        component={NotificationsScreen}
-        options={{
-          tabBarShowLabel: true,
-          tabBarIcon: ({ focused, color, size }) => {
-            const iconSize = typeof size === 'number' ? size : 24;
-            const isFocused = Boolean(focused);
-            return <BellIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} filled={isFocused} />;
-          },
-        }}
-      />
-      
-      <Tab.Screen
-        name=" "
-        component={QRScreen}
-        options={{
-          tabBarShowLabel: true,
-          tabBarIcon: ({ focused, color, size }) => {
-            const iconSize = typeof size === 'number' ? size : 24;
-            const isFocused = Boolean(focused);
-            const styleArray: any[] = [styles.qrTabButton];
-            if (isFocused === true) {
-              styleArray.push(styles.qrTabButtonActive);
-            }
-            if (Boolean(isDarkMode) === true) {
-              styleArray.push(styles.qrTabButtonDark);
-            }
-            return (
-              <View style={styleArray}>
-                <QRCodeIcon size={iconSize + 4} color={isFocused ? '#ffffff' : ARJA_PRIMARY_START} />
-              </View>
-            );
-          },
-        }}
-      />
-      
-      <Tab.Screen
-        name="Membresías"
-        component={MembershipsScreen}
-        options={{
-          tabBarShowLabel: true,
-          tabBarIcon: ({ focused, color, size }) => {
-            const iconSize = typeof size === 'number' ? size : 24;
-            const isFocused = Boolean(focused);
-            return <CreditCardIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} />;
-          },
-        }}
-      />
-      
-      <Tab.Screen
-        name="Turnos"
-        component={AppointmentsScreen}
-        options={{
-          tabBarShowLabel: true,
-          tabBarIcon: ({ focused, color, size }) => {
-            const iconSize = typeof size === 'number' ? size : 24;
-            const isFocused = Boolean(focused);
-            return <CalendarIcon size={iconSize} color={isFocused ? ARJA_PRIMARY_START : (color || '#666')} />;
-          },
-        }}
-      />
+      {tabs.map(tab => (
+        <Tab.Screen
+          key={tab.key}
+          name={tab.name}
+          component={tab.component}
+          options={{
+            tabBarShowLabel: true,
+            title: tab.label || tab.name,
+            tabBarIcon: ({ focused, color, size }) => {
+              const iconSize = typeof size === 'number' ? size : 24;
+              const isFocused = Boolean(focused);
+              if (tab.isQr) {
+                const styleArray: any[] = [styles.qrTabButton];
+                if (isFocused === true) styleArray.push(styles.qrTabButtonActive);
+                if (Boolean(isDarkMode) === true) styleArray.push(styles.qrTabButtonDark);
+                return (
+                  <View style={styleArray}>
+                    <tab.icon size={iconSize + 4} color={isFocused ? '#ffffff' : primaryColor} />
+                  </View>
+                );
+              }
+              return (
+                <tab.icon
+                  size={iconSize}
+                  color={isFocused ? primaryColor : (color || '#666')}
+                  {...(tab.filled ? { filled: isFocused } : {})}
+                />
+              );
+            },
+          }}
+        />
+      ))}
     </Tab.Navigator>
   );
 }
@@ -137,6 +197,7 @@ export default function AppNavigator() {
   const { isAuthenticated, checkAuth } = useAuthStore();
   const { tenantNotFound } = useTenantStore();
   const [isReady, setIsReady] = useState(false);
+  const fetchSettings = useAppSettingsStore(state => state.fetchSettings);
 
   useEffect(() => {
     // Verificar autenticación al montar
@@ -161,6 +222,13 @@ export default function AppNavigator() {
   useEffect(() => {
     console.log('[AppNavigator] Estado de autenticación:', { isAuthenticated, authStatus, tenantNotFound });
   }, [isAuthenticated, authStatus, tenantNotFound]);
+
+  // Cargar configuraciones de app (tema/branding) cuando el usuario esté autenticado
+  useEffect(() => {
+    if (authStatus) {
+      fetchSettings().catch(() => {});
+    }
+  }, [authStatus, fetchSettings]);
 
   // Mostrar loading mientras se verifica la autenticación
   // Nunca retornar null, siempre retornar un componente válido
@@ -217,29 +285,29 @@ export default function AppNavigator() {
         }}
       />
       <Stack.Screen 
-        name="Routines" 
-        component={RoutinesScreen}
+        name="TenantNotFound" 
+        component={TenantNotFoundScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="PaymentSuccess" 
+        component={PaymentSuccessScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="Membresías" 
+        component={MembershipsScreen}
         options={{ 
           headerShown: false,
         }}
       />
       <Stack.Screen 
         name="Classes" 
-        component={CoursesScreen}
-        options={{ 
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen 
-        name="Appointments" 
-        component={AppointmentsScreen}
-        options={{ 
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen 
-        name="TenantNotFound" 
-        component={TenantNotFoundScreen}
+        component={ClassesStack}
         options={{ 
           headerShown: false,
         }}

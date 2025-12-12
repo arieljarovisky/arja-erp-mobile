@@ -19,8 +19,9 @@ const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'X-Client-Type': 'mobile-app', // Indicar que es la app móvil
   },
-  timeout: 10000, // 10 segundos
+  timeout: 60000, // 60 segundos (necesario para generación con IA que puede tardar ~20-30 segundos)
 });
 
 // Interceptor para agregar token de autenticación automáticamente
@@ -35,10 +36,13 @@ apiClient.interceptors.request.use(
         console.log(`[API Client] No se encontró token en AsyncStorage para la petición: ${config.method?.toUpperCase()} ${config.url}`);
       }
       
-      // Agregar tenant_id si está disponible
+      // Agregar tenant_id como query y header para middleware multi-tenant
       const tenantId = await AsyncStorage.getItem('tenant_id');
-      if (tenantId && config.params) {
-        config.params.tenant_id = tenantId;
+      if (tenantId) {
+        config.headers['X-Tenant-ID'] = tenantId;
+        if (config.params) {
+          config.params.tenant_id = tenantId;
+        }
       }
       
       // Log de la URL completa para debugging

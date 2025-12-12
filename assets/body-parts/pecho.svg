@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" width="100" height="120">
+  <!-- Cabeza y cuello -->
+  <circle cx="50" cy="8" r="6" fill="#2c3e50" stroke="#1a252f" stroke-width="1"/>
+  <path d="M 50 14 L 50 20" stroke="#1a252f" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Hombros -->
+  <path d="M 35 22 Q 30 25 28 30" stroke="#1a252f" stroke-width="2.5" fill="none"/>
+  <path d="M 65 22 Q 70 25 72 30" stroke="#1a252f" stroke-width="2.5" fill="none"/>
+  
+  <!-- Pectorales principales -->
+  <path d="M 40 25 Q 35 30 38 40 Q 40 50 45 55 Q 50 58 55 55 Q 60 50 62 40 Q 65 30 60 25" 
+        fill="#e74c3c" fill-opacity="0.7" stroke="#c0392b" stroke-width="2.5"/>
+  
+  <!-- Líneas de definición pectoral -->
+  <path d="M 42 32 Q 40 38 42 45" stroke="#c0392b" stroke-width="1.5" fill="none"/>
+  <path d="M 58 32 Q 60 38 58 45" stroke="#c0392b" stroke-width="1.5" fill="none"/>
+  
+  <!-- Abdomen superior -->
+  <path d="M 45 50 Q 42 55 45 65 Q 48 70 50 72 Q 52 70 55 65 Q 58 55 55 50" 
+        fill="#e74c3c" fill-opacity="0.5" stroke="#c0392b" stroke-width="2"/>
+  
+  <!-- Líneas abdominales -->
+  <path d="M 46 58 L 54 58" stroke="#1a252f" stroke-width="1.5"/>
+  <path d="M 46 62 L 54 62" stroke="#1a252f" stroke-width="1.5"/>
+  <path d="M 46 66 L 54 66" stroke="#1a252f" stroke-width="1.5"/>
+  
+  <!-- Deltoides -->
+  <path d="M 32 28 Q 30 32 32 38" stroke="#1a252f" stroke-width="2" fill="none"/>
+  <path d="M 68 28 Q 70 32 68 38" stroke="#1a252f" stroke-width="2" fill="none"/>
+</svg>
+

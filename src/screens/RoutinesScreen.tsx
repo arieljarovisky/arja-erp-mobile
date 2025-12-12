@@ -14,22 +14,26 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../utils/useAppTheme';
-import { RoutinesIcon, PlusIcon } from '../components/Icons';
+import { RoutinesIcon, PlusIcon, DumbbellIcon, ClockIcon, EditIcon, TrashIcon, VideoIcon } from '../components/Icons';
 import { routinesAPI, Routine } from '../api/routines';
+import { workoutRoutinesAPI, WorkoutRoutine } from '../api/workoutRoutines';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
 
-export default function RoutinesScreen({ navigation }: any) {
+export default function RoutinesScreen() {
+  const navigation = useNavigation();
   const { isDark } = useAppTheme();
   const { customerId, tenantId, phone } = useAuthStore();
   const { features, loadFeatures, hasFeature } = useTenantStore();
   const [routines, setRoutines] = useState<Routine[]>([]);
+  const [workoutRoutines, setWorkoutRoutines] = useState<WorkoutRoutine[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -41,46 +45,90 @@ export default function RoutinesScreen({ navigation }: any) {
   }, [tenantId, loadFeatures]);
 
   const loadRoutines = useCallback(async () => {
-    if (!phone || !tenantId) {
+    console.log('[RoutinesScreen] loadRoutines iniciado', { phone, tenantId, hasRoutines: hasFeature('has_routines') });
+    
+    if (!tenantId) {
+      console.log('[RoutinesScreen] No hay tenantId, cancelando carga');
       setLoading(false);
       return;
     }
 
     // Verificar si el tenant tiene rutinas habilitadas
     if (!hasFeature('has_routines')) {
-      console.log('Rutinas no habilitadas para este negocio');
+      console.log('[RoutinesScreen] Rutinas no habilitadas para este negocio');
       setRoutines([]);
+      setWorkoutRoutines([]);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
     try {
-      const data = await routinesAPI.getMyRoutines(phone, tenantId);
-      setRoutines(data);
+      // Cargar rutinas de servicios (turnos)
+      if (phone) {
+        try {
+          console.log('[RoutinesScreen] Cargando rutinas de servicios...');
+          const data = await routinesAPI.getMyRoutines(phone, tenantId);
+          console.log('[RoutinesScreen] Rutinas de servicios cargadas:', data.length);
+          setRoutines(data);
+        } catch (error: any) {
+          if (error.response && error.response.status !== 404) {
+            console.error('[RoutinesScreen] Error cargando rutinas de servicios:', error);
+          } else {
+            console.log('[RoutinesScreen] No hay rutinas de servicios (404)');
+          }
+          setRoutines([]);
+        }
+      } else {
+        console.log('[RoutinesScreen] No hay phone, omitiendo rutinas de servicios');
+        setRoutines([]);
+      }
+
+      // Cargar rutinas de ejercicios
+      try {
+        console.log('[RoutinesScreen] Cargando rutinas de ejercicios...');
+        const workoutData = await workoutRoutinesAPI.getMyRoutines();
+        console.log('[RoutinesScreen] Rutinas de ejercicios cargadas:', workoutData.length, workoutData);
+        setWorkoutRoutines(workoutData);
+      } catch (error: any) {
+        console.error('[RoutinesScreen] Error cargando rutinas de ejercicios:', error);
+        if (error.response) {
+          console.error('[RoutinesScreen] Status:', error.response.status);
+          console.error('[RoutinesScreen] Data:', error.response.data);
+        }
+        if (error.response && error.response.status !== 404) {
+          Alert.alert('Error', `No se pudieron cargar las rutinas de ejercicios: ${error.response?.data?.error || error.message}`);
+        }
+        setWorkoutRoutines([]);
+      }
     } catch (error: any) {
+      console.error('[RoutinesScreen] Error general cargando rutinas:', error);
       if (error.response && error.response.status !== 404) {
-        // Error del servidor con respuesta
-        console.error('Error cargando rutinas:', error);
         Alert.alert('Error', 'No se pudieron cargar las rutinas');
       } else if (!error.response) {
-        // Error de red - solo loguear como info, mostrar estado vacío
-        console.log('Backend no disponible - mostrando estado vacío de rutinas');
+        console.log('[RoutinesScreen] Backend no disponible - mostrando estado vacío de rutinas');
       } else {
-        // 404 u otros errores esperados - solo loguear como info
-        console.log('No hay rutinas disponibles');
+        console.log('[RoutinesScreen] No hay rutinas disponibles');
       }
-      // Si es 404 o error de red, simplemente dejamos el estado vacío
       setRoutines([]);
+      setWorkoutRoutines([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [phone, tenantId]);
+  }, [phone, tenantId, hasFeature]);
 
   useEffect(() => {
     loadRoutines();
   }, [loadRoutines]);
+
+  // Recargar rutinas cuando la pantalla recibe el foco
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[RoutinesScreen] Pantalla enfocada, recargando rutinas...');
+      loadRoutines();
+    }, [loadRoutines])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -155,18 +203,19 @@ export default function RoutinesScreen({ navigation }: any) {
         style={styles.header}
       >
         <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <RoutinesIcon size={28} color="#ffffff" />
             <Text style={styles.headerTitle}>Mis Rutinas</Text>
           </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => {
-              Alert.alert('Crear rutina', 'Próximamente: Crear nueva rutina');
-            }}
-          >
-            <PlusIcon size={20} color="#ffffff" />
-          </TouchableOpacity>
+          {/* Botón de crear rutina oculto - solo entrenadores pueden generar rutinas */}
+          {/* Los customers solo pueden ver rutinas asignadas por entrenadores */}
+          <View style={styles.placeholder} />
         </View>
       </LinearGradient>
 
@@ -192,18 +241,88 @@ export default function RoutinesScreen({ navigation }: any) {
               Este negocio no tiene rutinas habilitadas
             </Text>
           </View>
-        ) : routines.length === 0 ? (
+        ) : routines.length === 0 && workoutRoutines.length === 0 ? (
           <View style={styles.emptyContainer}>
             <RoutinesIcon size={64} color={isDark ? '#4FD4E4' : ARJA_PRIMARY_START} />
             <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
               No tienes rutinas
             </Text>
             <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
-              Crea una rutina para agilizar tus reservas
+              Tu entrenador te asignará rutinas personalizadas aquí
             </Text>
           </View>
         ) : (
           <View style={styles.routinesList}>
+            {/* Rutinas de ejercicios */}
+            {workoutRoutines.map((routine) => (
+              <View
+                key={`workout-${routine.id}`}
+                style={[styles.routineCard, isDark && styles.routineCardDark]}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    navigation.navigate('WorkoutRoutineDetail' as never, { routineId: routine.id } as never);
+                  }}
+                >
+                  <View style={styles.routineHeader}>
+                    <View style={styles.routineIconContainer}>
+                      <View style={[styles.routineIconWrapper, isDark && styles.routineIconWrapperDark]}>
+                        <DumbbellIcon size={28} color={ARJA_PRIMARY_START} />
+                      </View>
+                    </View>
+                    <View style={styles.routineTitleContainer}>
+                      <Text style={[styles.routineName, isDark && styles.routineNameDark]} numberOfLines={1}>
+                        {routine.name}
+                      </Text>
+                      <View style={styles.routineBadges}>
+                        <View style={[styles.statusBadge, styles.workoutBadge]}>
+                          <DumbbellIcon size={12} color="#ffffff" />
+                          <Text style={styles.statusBadgeText}> Ejercicios</Text>
+                        </View>
+                        <View style={[styles.frequencyBadge, isDark && styles.frequencyBadgeDark]}>
+                          <Text style={[styles.frequencyBadgeText, isDark && styles.frequencyBadgeTextDark]}>
+                            {routine.difficulty.charAt(0).toUpperCase() + routine.difficulty.slice(1)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {routine.description && (
+                    <Text style={[styles.routineDescription, isDark && styles.routineDescriptionDark]} numberOfLines={2}>
+                      {routine.description}
+                    </Text>
+                  )}
+
+                  <View style={[styles.routineStats, isDark && styles.routineStatsDark]}>
+                    <View style={styles.routineStatItem}>
+                      <DumbbellIcon size={16} color={isDark ? '#90acbc' : '#6b7280'} />
+                      <Text style={[styles.routineStatText, isDark && styles.routineStatTextDark]}>
+                        {routine.exercises.length} ejercicios
+                      </Text>
+                    </View>
+                    <View style={styles.routineStatItem}>
+                      <ClockIcon size={16} color={isDark ? '#90acbc' : '#6b7280'} />
+                      <Text style={[styles.routineStatText, isDark && styles.routineStatTextDark]}>
+                        {routine.duration_minutes} min
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.routineFooter}>
+                    <Text style={[styles.routineDate, isDark && styles.routineDateDark]}>
+                      {format(new Date(routine.created_at), "dd 'de' MMMM, yyyy", { locale: es })}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Botones de editar/eliminar ocultos - solo entrenadores pueden modificar rutinas */}
+                {/* Los customers solo pueden ver rutinas asignadas */}
+              </View>
+            ))}
+
+            {/* Rutinas de servicios (turnos) */}
             {routines.map((routine) => (
               <View
                 key={routine.id}
@@ -333,11 +452,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    width: '100%',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#ffffff',
+    fontWeight: 'bold',
   },
   headerTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  placeholder: {
+    width: 40,
   },
   headerTitle: {
     fontSize: 28,
@@ -390,22 +526,42 @@ const styles = StyleSheet.create({
   },
   routineCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    marginBottom: 12,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   routineCardDark: {
     backgroundColor: '#1e2f3f',
+    borderColor: '#2c4a5f',
   },
   routineHeader: {
-    marginBottom: 12,
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 12,
+  },
+  routineIconContainer: {
+    marginRight: 4,
+  },
+  routineIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#e0f7fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  routineIconWrapperDark: {
+    backgroundColor: '#1e3a5f',
   },
   routineTitleContainer: {
+    flex: 1,
     gap: 8,
   },
   routineName: {
@@ -420,11 +576,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
+    alignItems: 'center',
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   activeBadge: {
     backgroundColor: '#10b981',
@@ -432,9 +592,12 @@ const styles = StyleSheet.create({
   inactiveBadge: {
     backgroundColor: '#6b7280',
   },
+  workoutBadge: {
+    backgroundColor: '#8b5cf6',
+  },
   statusBadgeText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   frequencyBadge: {
@@ -499,22 +662,70 @@ const styles = StyleSheet.create({
   serviceDurationDark: {
     color: '#9ca3af',
   },
-  routineFooter: {
-    paddingTop: 16,
+  routineStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
-  routineDate: {
-    fontSize: 12,
+  routineStatsDark: {
+    borderTopColor: '#2c4a5f',
+  },
+  routineStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  routineStatText: {
+    fontSize: 13,
     color: '#6b7280',
-    marginBottom: 12,
+    fontWeight: '500',
+  },
+  routineStatTextDark: {
+    color: '#9ca3af',
+  },
+  routineFooter: {
+    marginTop: 8,
+  },
+  routineDate: {
+    fontSize: 11,
+    color: '#9ca3af',
   },
   routineDateDark: {
-    color: '#9ca3af',
+    color: '#6b7280',
   },
   routineActions: {
     flexDirection: 'row',
     gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    justifyContent: 'flex-end',
+  },
+  routineActionsDark: {
+    borderTopColor: '#2c4a5f',
+  },
+  actionIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editButton: {
+    backgroundColor: '#e0f7fa',
+  },
+  editButtonDark: {
+    backgroundColor: '#1e3a5f',
+  },
+  deleteIconButton: {
+    backgroundColor: '#fef2f2',
+  },
+  deleteIconButtonDark: {
+    backgroundColor: '#3f1f1f',
   },
   actionButton: {
     flex: 1,

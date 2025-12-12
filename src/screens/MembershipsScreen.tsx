@@ -1,7 +1,7 @@
 /**
  * Pantalla de Membresías - Control de pagos mensuales
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,14 +13,16 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../utils/useAppTheme';
 import { CreditCardIcon, CalendarIcon } from '../components/Icons';
 import { membershipsAPI, MembershipPlan, MembershipSubscription } from '../api/memberships';
-import { format, parseISO, addMonths } from 'date-fns';
+import { format, parseISO, addMonths, differenceInDays, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/auth';
@@ -28,7 +30,8 @@ import { authService } from '../services/auth';
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
 
-export default function MembershipsScreen({ navigation }: any) {
+export default function MembershipsScreen() {
+  const navigation = useNavigation();
   const { isDark } = useAppTheme();
   const { customerId, tenantId } = useAuthStore();
   const { features, loadFeatures, hasFeature } = useTenantStore();
@@ -37,6 +40,8 @@ export default function MembershipsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState(false);
+  const appState = useRef(AppState.currentState);
+  const paymentInProgress = useRef(false);
 
   // Cargar features del tenant al montar
   useEffect(() => {
@@ -44,6 +49,103 @@ export default function MembershipsScreen({ navigation }: any) {
       loadFeatures(tenantId);
     }
   }, [tenantId, loadFeatures]);
+
+  // Función para verificar y navegar a la pantalla de éxito
+  const checkAndNavigateToSuccess = useCallback(async () => {
+    try {
+      // Esperar un momento para que el webhook procese el pago
+      setTimeout(async () => {
+        try {
+          // Recargar datos para verificar el estado de la suscripción
+          if (customerId && tenantId) {
+            const subscriptionData = await membershipsAPI.getMyMembership(customerId, tenantId);
+            
+            // Si la suscripción está activa o autorizada, navegar a la pantalla de éxito
+            if (subscriptionData && (subscriptionData.status === 'authorized' || subscriptionData.status === 'active')) {
+              paymentInProgress.current = false;
+              navigation.navigate('PaymentSuccess' as never);
+            } else if (subscriptionData && subscriptionData.status === 'pending') {
+              // Si está pendiente, también mostrar la pantalla de éxito (se verificará allí)
+              paymentInProgress.current = false;
+              navigation.navigate('PaymentSuccess' as never);
+            }
+          }
+        } catch (error) {
+          console.error('[MembershipsScreen] Error verificando suscripción después de pago:', error);
+        }
+      }, 2000); // Esperar 2 segundos para que el webhook procese
+    } catch (error) {
+      console.error('[MembershipsScreen] Error en checkAndNavigateToSuccess:', error);
+    }
+  }, [customerId, tenantId, navigation]);
+
+  // Función para manejar deep links
+  const handleDeepLink = useCallback((url: string) => {
+    try {
+      console.log('[MembershipsScreen] Procesando deep link:', url);
+      
+      if (url.startsWith('arja-erp://payment-success')) {
+        console.log('[MembershipsScreen] Deep link de pago exitoso detectado');
+        paymentInProgress.current = true;
+        checkAndNavigateToSuccess();
+      } else if (url.startsWith('arja-erp://payment-failure')) {
+        console.log('[MembershipsScreen] Deep link de pago fallido detectado');
+        paymentInProgress.current = false;
+        Alert.alert(
+          'Pago no completado',
+          'El pago no se pudo completar. Por favor, intentá nuevamente.',
+          [{ text: 'OK' }]
+        );
+      } else if (url.startsWith('arja-erp://payment-pending')) {
+        console.log('[MembershipsScreen] Deep link de pago pendiente detectado');
+        paymentInProgress.current = true;
+        checkAndNavigateToSuccess();
+      }
+    } catch (error) {
+      console.error('[MembershipsScreen] Error procesando deep link:', error);
+    }
+  }, [checkAndNavigateToSuccess]);
+
+  // Manejar deep links de Mercado Pago (payment-success, payment-failure)
+  useEffect(() => {
+    // Verificar si hay un deep link al iniciar
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink(url);
+      }
+    });
+
+    // Escuchar deep links mientras la app está abierta
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      console.log('[MembershipsScreen] Deep link recibido:', url);
+      handleDeepLink(url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [handleDeepLink]);
+
+  // Detectar cuando el usuario regresa de Mercado Pago (fallback si no funciona el deep link)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      // Si la app vuelve al foreground y había un pago en progreso
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active' &&
+        paymentInProgress.current
+      ) {
+        console.log('[MembershipsScreen] App volvió al foreground después de pago');
+        checkAndNavigateToSuccess();
+      }
+
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [customerId, tenantId, navigation]);
 
   const loadData = useCallback(async () => {
     if (!tenantId || !customerId) {
@@ -153,19 +255,21 @@ export default function MembershipsScreen({ navigation }: any) {
               );
               
               if (result.mp_init_point) {
+                // Marcar que hay un pago en progreso
+                paymentInProgress.current = true;
+                
                 // Abrir link de pago de Mercado Pago
                 const canOpen = await Linking.canOpenURL(result.mp_init_point);
                 if (canOpen) {
                   await Linking.openURL(result.mp_init_point);
-                  Alert.alert(
-                    'Pago pendiente',
-                    'Se abrió la página de pago. Una vez completado, tu membresía se activará automáticamente.'
-                  );
+                  // No mostrar alert, la app detectará cuando el usuario regrese
                 } else {
                   Alert.alert('Error', 'No se pudo abrir el link de pago');
+                  paymentInProgress.current = false;
                 }
               } else {
                 Alert.alert('Éxito', 'Te has suscrito correctamente');
+                paymentInProgress.current = false;
               }
               await loadData();
             } catch (error: any) {
@@ -201,16 +305,18 @@ export default function MembershipsScreen({ navigation }: any) {
       const paymentLink = await membershipsAPI.getPaymentLink(subscription.id);
       const canOpen = await Linking.canOpenURL(paymentLink);
       if (canOpen) {
+        // Marcar que hay un pago en progreso
+        paymentInProgress.current = true;
+        
         await Linking.openURL(paymentLink);
-        Alert.alert(
-          'Pago pendiente',
-          'Se abrió la página de pago. Una vez completado, tu membresía se renovará automáticamente.'
-        );
+        // No mostrar alert, la app detectará cuando el usuario regrese
       } else {
         Alert.alert('Error', 'No se pudo abrir el link de pago');
+        paymentInProgress.current = false;
       }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo generar el link de pago');
+      paymentInProgress.current = false;
     } finally {
       setLoadingPayment(false);
     }
@@ -267,10 +373,82 @@ export default function MembershipsScreen({ navigation }: any) {
     );
   };
 
+  const handleUpgradePlan = async (newPlan: MembershipPlan) => {
+    if (!subscription) return;
+
+    Alert.alert(
+      'Subir de plan',
+      `¿Deseas cambiar al plan "${newPlan.name}" por $${newPlan.price} cada ${newPlan.frequency} mes${newPlan.frequency > 1 ? 'es' : ''}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
+            try {
+              setLoadingPayment(true);
+              const result = await membershipsAPI.changePlan(subscription.id, newPlan.id);
+              
+              if (result.mp_init_point) {
+                const canOpen = await Linking.canOpenURL(result.mp_init_point);
+                if (canOpen) {
+                  paymentInProgress.current = true;
+                  await Linking.openURL(result.mp_init_point);
+                } else {
+                  Alert.alert('Error', 'No se pudo abrir el link de pago');
+                }
+              } else {
+                Alert.alert('Éxito', 'Plan actualizado correctamente');
+              }
+              await loadData();
+            } catch (error: any) {
+              console.error('Error cambiando de plan:', error);
+              const errorMessage = error.response?.data?.error || error.message || 'No se pudo cambiar el plan';
+              
+              if (error.response?.data?.requires_admin) {
+                Alert.alert(
+                  'Contactar administración',
+                  'Para bajar de plan, por favor contactá a administración.',
+                  [{ text: 'OK' }]
+                );
+              } else {
+                Alert.alert('Error', errorMessage);
+              }
+            } finally {
+              setLoadingPayment(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleContactAdmin = () => {
+    Alert.alert(
+      'Contactar administración',
+      'Para bajar de plan, necesitás contactar a administración. ¿Deseas enviar un mensaje?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Contactar',
+          onPress: () => {
+            // Aquí podrías abrir WhatsApp, email, o una pantalla de contacto
+            // Por ahora mostramos un mensaje
+            Alert.alert(
+              'Contactar administración',
+              'Por favor, contactá a administración a través de los canales oficiales para solicitar el cambio de plan.',
+              [{ text: 'OK' }]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const getStatusLabel = (status: string) => {
     switch (status.toLowerCase()) {
       case 'active':
-        return 'Activa';
+      case 'authorized':
+        return 'Activo';
       case 'pending':
         return 'Pendiente';
       case 'cancelled':
@@ -282,9 +460,24 @@ export default function MembershipsScreen({ navigation }: any) {
     }
   };
 
+  // Calcular días hasta el próximo pago
+  const getDaysUntilRenewal = (nextChargeAt: string | undefined): number | null => {
+    if (!nextChargeAt) return null;
+    try {
+      const nextCharge = parseISO(nextChargeAt);
+      const today = new Date();
+      const days = differenceInDays(nextCharge, today);
+      return days >= 0 ? days : null;
+    } catch (error) {
+      console.error('Error calculando días hasta renovación:', error);
+      return null;
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'active':
+      case 'authorized':
         return '#10b981';
       case 'pending':
         return '#f59e0b';
@@ -319,8 +512,17 @@ export default function MembershipsScreen({ navigation }: any) {
         style={styles.header}
       >
         <View style={styles.headerContent}>
-          <CreditCardIcon size={28} color="#ffffff" />
-          <Text style={styles.headerTitle}>Membresías</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <CreditCardIcon size={28} color="#ffffff" />
+            <Text style={styles.headerTitle}>Membresías</Text>
+          </View>
+          <View style={styles.placeholder} />
         </View>
       </LinearGradient>
 
@@ -348,15 +550,31 @@ export default function MembershipsScreen({ navigation }: any) {
                   <Text style={[styles.subscriptionName, isDark && styles.subscriptionNameDark]}>
                     {subscription.plan?.name || 'Membresía'}
                   </Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusColor(subscription.status) },
-                    ]}
-                  >
-                    <Text style={styles.statusBadgeText}>
-                      {getStatusLabel(subscription.status)}
-                    </Text>
+                  <View style={styles.statusContainer}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: getStatusColor(subscription.status) },
+                      ]}
+                    >
+                      <Text style={styles.statusBadgeText}>
+                        {getStatusLabel(subscription.status)}
+                      </Text>
+                    </View>
+                    {(() => {
+                      const daysUntil = getDaysUntilRenewal(subscription.next_charge_at);
+                      const isActive = subscription.status.toLowerCase() === 'active' || subscription.status.toLowerCase() === 'authorized';
+                      if (isActive && daysUntil !== null && daysUntil <= 7) {
+                        return (
+                          <View style={[styles.daysBadge, daysUntil <= 3 && styles.daysBadgeUrgent]}>
+                            <Text style={[styles.daysBadgeText, daysUntil <= 3 && styles.daysBadgeTextUrgent]}>
+                              {daysUntil === 0 ? 'Vence hoy' : daysUntil === 1 ? 'Vence mañana' : `Faltan ${daysUntil} días`}
+                            </Text>
+                          </View>
+                        );
+                      }
+                      return null;
+                    })()}
                   </View>
                 </View>
               </View>
@@ -444,13 +662,13 @@ export default function MembershipsScreen({ navigation }: any) {
                     )}
                   </TouchableOpacity>
                 )}
-                {(subscription.status.toLowerCase() === 'active' || subscription.status.toLowerCase() === 'pending') && (
+                {(subscription.status.toLowerCase() === 'authorized' || subscription.status.toLowerCase() === 'active') && (
                   <TouchableOpacity
                     style={[styles.actionButton, styles.cancelButton]}
                     onPress={handleCancelMembership}
                   >
                     <Text style={[styles.actionButtonText, styles.cancelButtonText]}>
-                      Cancelar membresía
+                      Darse de baja
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -511,24 +729,73 @@ export default function MembershipsScreen({ navigation }: any) {
                     </View>
                   )}
 
-                  <TouchableOpacity
-                    style={[
-                      styles.subscribeButton,
-                      subscription?.membership_plan_id === plan.id && styles.subscribeButtonActive,
-                    ]}
-                    onPress={() => handleSubscribe(plan)}
-                    disabled={loadingPayment || subscription?.membership_plan_id === plan.id}
-                  >
-                    {loadingPayment ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <Text style={styles.subscribeButtonText}>
-                        {subscription?.membership_plan_id === plan.id
-                          ? 'Plan actual'
-                          : 'Suscribirse'}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
+                  {(() => {
+                    const isCurrentPlan = subscription?.membership_plan_id === plan.id;
+                    const currentPlanPrice = subscription?.plan?.price || 0;
+                    const isUpgrade = plan.price > currentPlanPrice;
+                    const isDowngrade = plan.price < currentPlanPrice && currentPlanPrice > 0;
+                    
+                    if (isCurrentPlan) {
+                      return (
+                        <TouchableOpacity
+                          style={[styles.subscribeButton, styles.subscribeButtonActive]}
+                          disabled={true}
+                        >
+                          <Text style={[styles.subscribeButtonText, styles.subscribeButtonTextActive]}>
+                            Plan actual
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    
+                    if (isUpgrade && subscription) {
+                      return (
+                        <TouchableOpacity
+                          style={[styles.subscribeButton, styles.upgradeButton]}
+                          onPress={() => handleUpgradePlan(plan)}
+                          disabled={loadingPayment}
+                        >
+                          {loadingPayment ? (
+                            <ActivityIndicator size="small" color="#ffffff" />
+                          ) : (
+                            <Text style={styles.subscribeButtonText}>
+                              Subir de plan
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    }
+                    
+                    if (isDowngrade && subscription) {
+                      return (
+                        <TouchableOpacity
+                          style={[styles.subscribeButton, styles.contactButton]}
+                          onPress={handleContactAdmin}
+                        >
+                          <Text style={styles.subscribeButtonText}>
+                            Contactar administración
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    
+                    // Si no tiene suscripción, mostrar botón de suscribirse
+                    return (
+                      <TouchableOpacity
+                        style={styles.subscribeButton}
+                        onPress={() => handleSubscribe(plan)}
+                        disabled={loadingPayment}
+                      >
+                        {loadingPayment ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <Text style={styles.subscribeButtonText}>
+                            Suscribirse
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
               ))}
           </View>
@@ -568,12 +835,34 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+    flex: 1,
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  placeholder: {
+    width: 40,
   },
   scrollView: {
     flex: 1,
@@ -637,9 +926,14 @@ const styles = StyleSheet.create({
   subscriptionTitleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  statusContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 6,
   },
   subscriptionName: {
     fontSize: 22,
@@ -659,6 +953,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  daysBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  daysBadgeUrgent: {
+    backgroundColor: '#fee2e2',
+  },
+  daysBadgeText: {
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  daysBadgeTextUrgent: {
+    color: '#991b1b',
   },
   subscriptionDescription: {
     fontSize: 14,
@@ -822,9 +1133,18 @@ const styles = StyleSheet.create({
   subscribeButtonActive: {
     backgroundColor: '#10b981',
   },
+  upgradeButton: {
+    backgroundColor: '#10b981',
+  },
+  contactButton: {
+    backgroundColor: '#f59e0b',
+  },
   subscribeButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  subscribeButtonTextActive: {
+    color: '#065f46',
   },
 });

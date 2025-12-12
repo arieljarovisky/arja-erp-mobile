@@ -181,5 +181,23 @@ export const membershipsAPI = {
   cancelMembership: async (subscriptionId: number): Promise<void> => {
     await apiClient.delete(`/api/memberships/subscriptions/${subscriptionId}`);
   },
+
+  /**
+   * Cambiar de plan (upgrade)
+   */
+  changePlan: async (
+    subscriptionId: number,
+    newPlanId: number
+  ): Promise<{ subscription_id: number; mp_init_point: string; message: string }> => {
+    const response = await apiClient.post(`/api/memberships/subscriptions/${subscriptionId}/change-plan`, {
+      membership_plan_id: newPlanId,
+    });
+    
+    if (response.data?.ok && response.data?.data) {
+      return response.data.data;
+    }
+    
+    throw new Error(response.data?.error || 'No se pudo cambiar el plan');
+  },
 };
 

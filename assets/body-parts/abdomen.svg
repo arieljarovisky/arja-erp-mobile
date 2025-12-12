@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Recto abdominal superior -->
+  <path d="M 40 20 Q 35 25 40 40 Q 45 45 50 47 Q 55 45 60 40 Q 65 25 60 20" 
+        fill="#27ae60" fill-opacity="0.6" stroke="#229954" stroke-width="2"/>
+  
+  <!-- Líneas abdominales (six-pack) -->
+  <path d="M 42 28 L 58 28" stroke="#1a252f" stroke-width="2.5"/>
+  <path d="M 42 33 L 58 33" stroke="#1a252f" stroke-width="2.5"/>
+  <path d="M 42 38 L 58 38" stroke="#1a252f" stroke-width="2.5"/>
+  
+  <!-- Recto abdominal medio -->
+  <path d="M 42 45 Q 38 50 42 65 Q 45 70 50 72 Q 55 70 58 65 Q 62 50 58 45" 
+        fill="#27ae60" fill-opacity="0.6" stroke="#229954" stroke-width="2"/>
+  <path d="M 42 50 L 58 50" stroke="#1a252f" stroke-width="2.5"/>
+  <path d="M 42 55 L 58 55" stroke="#1a252f" stroke-width="2.5"/>
+  
+  <!-- Oblicuos -->
+  <path d="M 32 35 Q 30 40 32 45" stroke="#229954" stroke-width="1.5" fill="none"/>
+  <path d="M 68 35 Q 70 40 68 45" stroke="#229954" stroke-width="1.5" fill="none"/>
+  <path d="M 32 50 Q 30 55 32 60" stroke="#229954" stroke-width="1.5" fill="none"/>
+  <path d="M 68 50 Q 70 55 68 60" stroke="#229954" stroke-width="1.5" fill="none"/>
+  
+  <!-- Línea alba (centro) -->
+  <path d="M 50 20 L 50 70" stroke="#1a252f" stroke-width="3" stroke-linecap="round"/>
+</svg>
+

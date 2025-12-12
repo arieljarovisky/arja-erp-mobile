@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Hombro izquierdo -->
+  <circle cx="25" cy="15" r="6" fill="#e67e22" fill-opacity="0.5" stroke="#d35400" stroke-width="2.5"/>
+  
+  <!-- Deltoides anterior izquierdo -->
+  <path d="M 20 20 Q 18 25 20 30 Q 22 35 25 37" 
+        fill="#e67e22" fill-opacity="0.6" stroke="#d35400" stroke-width="2.5"/>
+  
+  <!-- Bíceps braquial izquierdo - Cabeza larga y corta -->
+  <path d="M 22 30 Q 18 40 22 55 Q 26 65 30 68 Q 34 70 38 68 Q 42 65 46 55 Q 50 40 46 30" 
+        fill="#e67e22" fill-opacity="0.8" stroke="#d35400" stroke-width="3"/>
+  
+  <!-- Separación entre cabeza larga y corta del bíceps -->
+  <path d="M 30 38 Q 28 42 30 46" stroke="#d35400" stroke-width="2" fill="none"/>
+  <path d="M 34 42 Q 32 46 34 50" stroke="#d35400" stroke-width="1.5" fill="none"/>
+  
+  <!-- Tríceps izquierdo (vista lateral) -->
+  <path d="M 28 35 Q 25 40 28 50 Q 30 55 32 58" 
+        fill="#e67e22" fill-opacity="0.6" stroke="#d35400" stroke-width="2"/>
+  
+  <!-- Antebrazo izquierdo - Flexores -->
+  <path d="M 26 55 Q 24 65 26 75 Q 28 80 30 82" 
+        fill="#e67e22" fill-opacity="0.5" stroke="#d35400" stroke-width="2"/>
+  
+  <!-- Braquiorradial izquierdo -->
+  <path d="M 28 60 Q 26 65 28 70" stroke="#d35400" stroke-width="1.5" fill="none"/>
+  
+  <!-- Hombro derecho -->
+  <circle cx="75" cy="15" r="6" fill="#e67e22" fill-opacity="0.5" stroke="#d35400" stroke-width="2.5"/>
+  
+  <!-- Deltoides anterior derecho -->
+  <path d="M 80 20 Q 82 25 80 30 Q 78 35 75 37" 
+        fill="#e67e22" fill-opacity="0.6" stroke="#d35400" stroke-width="2.5"/>
+  
+  <!-- Bíceps braquial derecho - Cabeza larga y corta -->
+  <path d="M 78 30 Q 82 40 78 55 Q 74 65 70 68 Q 66 70 62 68 Q 58 65 54 55 Q 50 40 54 30" 
+        fill="#e67e22" fill-opacity="0.8" stroke="#d35400" stroke-width="3"/>
+  
+  <!-- Separación entre cabeza larga y corta del bíceps -->
+  <path d="M 70 38 Q 72 42 70 46" stroke="#d35400" stroke-width="2" fill="none"/>
+  <path d="M 66 42 Q 68 46 66 50" stroke="#d35400" stroke-width="1.5" fill="none"/>
+  
+  <!-- Tríceps derecho (vista lateral) -->
+  <path d="M 72 35 Q 75 40 72 50 Q 70 55 68 58" 
+        fill="#e67e22" fill-opacity="0.6" stroke="#d35400" stroke-width="2"/>
+  
+  <!-- Antebrazo derecho - Flexores -->
+  <path d="M 74 55 Q 76 65 74 75 Q 72 80 70 82" 
+        fill="#e67e22" fill-opacity="0.5" stroke="#d35400" stroke-width="2"/>
+  
+  <!-- Braquiorradial derecho -->
+  <path d="M 72 60 Q 74 65 72 70" stroke="#d35400" stroke-width="1.5" fill="none"/>
+  
+  <!-- Líneas de definición del bíceps -->
+  <path d="M 26 36 Q 24 40 26 44" stroke="#d35400" stroke-width="1.5" fill="none"/>
+  <path d="M 74 36 Q 76 40 74 44" stroke="#d35400" stroke-width="1.5" fill="none"/>
+  
+  <!-- Vena prominente en el bíceps -->
+  <path d="M 32 42 Q 31 46 32 50" stroke="#d35400" stroke-width="1" fill="none" opacity="0.6"/>
+  <path d="M 68 42 Q 69 46 68 50" stroke="#d35400" stroke-width="1" fill="none" opacity="0.6"/>
+  
+  <!-- Codo -->
+  <circle cx="30" cy="60" r="2.5" fill="#1a252f" fill-opacity="0.3" stroke="#1a252f" stroke-width="1.5"/>
+  <circle cx="70" cy="60" r="2.5" fill="#1a252f" fill-opacity="0.3" stroke="#1a252f" stroke-width="1.5"/>
+</svg>
+

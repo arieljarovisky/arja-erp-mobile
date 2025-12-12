@@ -14,28 +14,38 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../utils/useAppTheme';
-import { ClassesIcon, CalendarIcon } from '../components/Icons';
-import { classesAPI, ClassSeries, ClassSession, ClassEnrollment } from '../api/classes';
-import { format, parseISO, isPast, isFuture } from 'date-fns';
+import { ClassesIcon, CalendarIcon, PlusIcon, CoursesIcon } from '../components/Icons';
+import { classesAPI, ClassEnrollment, ClassSession } from '../api/classes';
+import { format, parseISO, isPast, isFuture, differenceInHours } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
 
-export default function CoursesScreen({ navigation }: any) {
+export default function CoursesScreen() {
+  const navigation = useNavigation();
   const { isDark } = useAppTheme();
   const { customerId, tenantId, phone } = useAuthStore();
-  const { features, loadFeatures, hasFeature } = useTenantStore();
-  const [classes, setClasses] = useState<ClassSeries[]>([]);
+  const { features, loadFeatures, hasFeature, isLoading: isLoadingFeatures } = useTenantStore();
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
+  const [enrollmentGroups, setEnrollmentGroups] = useState<
+    {
+      key: string;
+      name: string;
+      days: string[];
+      time: string;
+      nextSession: ClassSession;
+      enrollment: ClassEnrollment;
+      sessions: { enrollment: ClassEnrollment; session: ClassSession }[];
+    }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedSeries, setSelectedSeries] = useState<ClassSeries | null>(null);
-  const [sessions, setSessions] = useState<ClassSession[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [enrollmentExpanded, setEnrollmentExpanded] = useState<Record<string, number>>({});
 
   // Cargar features del tenant al montar
   useEffect(() => {
@@ -45,15 +55,24 @@ export default function CoursesScreen({ navigation }: any) {
   }, [tenantId, loadFeatures]);
 
   const loadData = useCallback(async () => {
-    if (!tenantId || !phone) {
+    if (!tenantId) {
       setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    // Esperar a que las features se carguen antes de verificar
+    if (isLoadingFeatures) {
+      console.log('[CoursesScreen] Esperando a que se carguen las features...');
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     // Verificar si el tenant tiene clases habilitadas
-    if (!hasFeature('has_classes')) {
-      console.log('Clases no habilitadas para este negocio');
-      setClasses([]);
+    const hasClassesFeature = hasFeature('has_classes');
+    if (!hasClassesFeature) {
+      console.log('[CoursesScreen] Clases no habilitadas para este negocio - saltando carga de datos');
       setEnrollments([]);
       setLoading(false);
       setRefreshing(false);
@@ -61,102 +80,102 @@ export default function CoursesScreen({ navigation }: any) {
     }
 
     try {
-      const [classesData, enrollmentsData] = await Promise.all([
-        classesAPI.getClasses(tenantId),
-        classesAPI.getMyEnrollments(phone, tenantId),
-      ]);
-      setClasses(classesData);
-      setEnrollments(enrollmentsData);
+      const enrollmentsData = await classesAPI.getMyEnrollments(tenantId, {
+        phone: phone || undefined,
+        customerId: customerId || undefined,
+      });
+      const enrollList = Array.isArray(enrollmentsData) ? enrollmentsData : [];
+      setEnrollments(enrollList);
+
+      // Agrupar inscripciones por serie para mostrar una sola tarjeta por serie
+      const groupMap = new Map<
+        string,
+        {
+          key: string;
+          name: string;
+          days: Set<string>;
+          time: string;
+          nextSession: ClassSession;
+          enrollment: ClassEnrollment;
+          sessions: { enrollment: ClassEnrollment; session: ClassSession }[];
+        }
+      >();
+      enrollList
+        .filter((e) => e.session?.starts_at)
+        .forEach((enr) => {
+          const session = enr.session!;
+          const key = String(session.class_series_id ?? session.series_name ?? session.id);
+          const name = session.series_name || 'Clase';
+          const dayLabel = format(parseISO(session.starts_at), 'eee', { locale: es });
+          const timeLabel = format(parseISO(session.starts_at), 'HH:mm', { locale: es });
+          const existing = groupMap.get(key);
+          if (existing) {
+            existing.days.add(dayLabel);
+            // elegir la próxima sesión
+            const currentNext = parseISO(existing.nextSession.starts_at);
+            const candidate = parseISO(session.starts_at);
+            if (isFuture(candidate) && (!isFuture(currentNext) || candidate < currentNext)) {
+              existing.nextSession = session;
+              existing.enrollment = enr;
+              existing.time = timeLabel;
+            }
+            existing.sessions.push({ enrollment: enr, session });
+          } else {
+            groupMap.set(key, {
+              key,
+              name,
+              days: new Set([dayLabel]),
+              time: timeLabel,
+              nextSession: session,
+              enrollment: enr,
+              sessions: [{ enrollment: enr, session }],
+            });
+          }
+        });
+      setEnrollmentGroups(
+        Array.from(groupMap.values()).map((g) => ({
+          key: g.key,
+          name: g.name,
+          days: Array.from(g.days),
+          time: g.time,
+          nextSession: g.nextSession,
+          enrollment: g.enrollment,
+          sessions: g.sessions,
+        }))
+      );
     } catch (error: any) {
       if (error.response?.status === 404) {
         // El lugar no tiene clases habilitadas
-        console.log('No hay clases disponibles');
-        setClasses([]);
+        console.log('[CoursesScreen] No hay clases disponibles (404)');
+        setEnrollments([]);
       } else if (error.response) {
         // Error del servidor con respuesta
-        console.error('Error cargando clases:', error);
-        Alert.alert('Error', 'No se pudieron cargar las clases');
+        Alert.alert('Error', `No se pudieron cargar las inscripciones: ${error.response?.data?.error || error.message}`);
       } else {
         // Error de red - solo loguear como info, mostrar estado vacío
-        console.log('Backend no disponible - mostrando estado vacío de clases');
-        setClasses([]);
+        console.log('[CoursesScreen] Backend no disponible - mostrando estado vacío de inscripciones');
+        setEnrollments([]);
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tenantId, phone]);
+  }, [tenantId, phone, hasFeature, features, isLoadingFeatures]);
 
+  // Cargar datos cuando las features estén listas
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!isLoadingFeatures && tenantId) {
+      loadData();
+    }
+  }, [isLoadingFeatures, loadData, tenantId]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadData();
   }, [loadData]);
 
-  const loadSessions = async (series: ClassSeries) => {
-    setLoadingSessions(true);
-    setSelectedSeries(series);
-    try {
-      const sessionsData = await classesAPI.getClassSessions(series.id, tenantId!);
-      setSessions(sessionsData);
-    } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar las sesiones');
-    } finally {
-      setLoadingSessions(false);
-    }
-  };
-
-  const handleEnroll = async (session: ClassSession) => {
-    if (!customerId || !tenantId) {
-      Alert.alert('Error', 'No se pudo identificar tu cuenta');
-      return;
-    }
-
-    // Verificar si ya está inscrito
-    const alreadyEnrolled = enrollments.some(
-      (e) => e.class_session_id === session.id
-    );
-    if (alreadyEnrolled) {
-      Alert.alert('Ya estás inscrito', 'Ya tienes una reserva para esta clase');
-      return;
-    }
-
-    // Verificar capacidad
-    if (session.max_capacity && session.current_enrollments) {
-      if (session.current_enrollments >= session.max_capacity) {
-        Alert.alert('Clase llena', 'Esta clase ya alcanzó su capacidad máxima');
-        return;
-      }
-    }
-
-    Alert.alert(
-      'Reservar clase',
-      `¿Confirmar reserva para la clase del ${format(parseISO(session.starts_at), "dd 'de' MMMM 'a las' HH:mm", { locale: es })}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          onPress: async () => {
-            try {
-              await classesAPI.enrollToClass(session.id, customerId, tenantId);
-              Alert.alert('Éxito', 'Te has inscrito a la clase correctamente');
-              await loadData();
-              setSelectedSeries(null);
-              setSessions([]);
-            } catch (error: any) {
-              Alert.alert(
-                'Error',
-                error.response?.data?.message || 'No se pudo realizar la reserva'
-              );
-            }
-          },
-        },
-      ]
-    );
-  };
+  const canCancelSession = (startsAt: string) =>
+    differenceInHours(parseISO(startsAt), new Date()) >= 24;
 
   const handleCancelEnrollment = (enrollment: ClassEnrollment) => {
     Alert.alert(
@@ -169,7 +188,7 @@ export default function CoursesScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await classesAPI.cancelEnrollment(enrollment.id);
+              await classesAPI.cancelEnrollment(enrollment.id, tenantId!);
               Alert.alert('Reserva cancelada', 'Tu reserva ha sido cancelada');
               await loadData();
             } catch (error) {
@@ -181,17 +200,8 @@ export default function CoursesScreen({ navigation }: any) {
     );
   };
 
-  const isEnrolled = (sessionId: number) => {
-    return enrollments.some((e) => e.class_session_id === sessionId);
-  };
-
   const isSessionPast = (session: ClassSession) => {
     return isPast(parseISO(session.ends_at));
-  };
-
-  const isSessionFull = (session: ClassSession) => {
-    if (!session.max_capacity || !session.current_enrollments) return false;
-    return session.current_enrollments >= session.max_capacity;
   };
 
   if (loading) {
@@ -213,13 +223,24 @@ export default function CoursesScreen({ navigation }: any) {
         colors={[ARJA_PRIMARY_START, ARJA_PRIMARY_END]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.header}
+        style={styles.headerGradient}
       >
-        <View style={styles.headerContent}>
-          <View style={styles.headerTitleContainer}>
-            <ClassesIcon size={28} color="#ffffff" />
+        <View style={[styles.header, styles.headerOnGradient]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <CalendarIcon size={22} color="#ffffff" />
             <Text style={styles.headerTitle}>Clases</Text>
           </View>
+          <TouchableOpacity
+            style={styles.primaryCta}
+            onPress={() => navigation.navigate('AvailableClasses' as never)}
+            activeOpacity={0.9}
+          >
+            <PlusIcon size={16} color="#0f172a" />
+            <Text style={styles.primaryCtaText}>Reservar</Text>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -235,38 +256,72 @@ export default function CoursesScreen({ navigation }: any) {
           />
         }
       >
-        {classes.length === 0 ? (
+        {enrollmentGroups.length === 0 ? (
           <View style={styles.emptyContainer}>
             <ClassesIcon size={64} color={isDark ? '#4FD4E4' : ARJA_PRIMARY_START} />
             <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-              No hay clases disponibles
+              No tienes reservas
             </Text>
             <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
-              Este lugar no tiene clases habilitadas actualmente
+              Aún no te has inscrito a ninguna clase
             </Text>
+            <TouchableOpacity
+              style={styles.availableCta}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('AvailableClasses' as never)}
+            >
+              <Text style={styles.availableCtaText}>Ver clases disponibles</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
             {/* Mis Reservas */}
-            {enrollments.length > 0 && (
+            {enrollmentGroups.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                  Mis Reservas
-                </Text>
-                {enrollments.map((enrollment) => {
-                  const session = enrollment.session;
-                  if (!session) return null;
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+                    Mis Reservas
+                  </Text>
+                  <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>{enrollmentGroups.length}</Text>
+                  </View>
+                </View>
+                {enrollmentGroups.map((group) => {
+                  const session = group.nextSession;
                   const isPast = isSessionPast(session);
-                  
+                  const daysLabel = `${group.days.join(' ')} ${group.time}`;
+                  const expandedCount = enrollmentExpanded[group.key] ?? 0;
+                  const visibleEnrolled = group.sessions.slice(0, expandedCount || 0);
                   return (
                     <View
-                      key={enrollment.id}
+                      key={group.key}
                       style={[styles.enrollmentCard, isDark && styles.enrollmentCardDark]}
                     >
-                      <View style={styles.enrollmentHeader}>
-                        <Text style={[styles.enrollmentTitle, isDark && styles.enrollmentTitleDark]}>
-                          {session.series_name || 'Clase'}
-                        </Text>
+                      <TouchableOpacity
+                        style={styles.enrollmentHeader}
+                        activeOpacity={0.9}
+                        onPress={() => {
+                          if (expandedCount > 0) {
+                            setEnrollmentExpanded((prev) => ({ ...prev, [group.key]: 0 }));
+                          } else {
+                            const initial = Math.min(5, group.sessions.length);
+                            setEnrollmentExpanded((prev) => ({ ...prev, [group.key]: initial }));
+                          }
+                        }}
+                      >
+                        <View style={styles.enrollmentHeaderLeft}>
+                          <View style={[styles.enrollmentIcon, { backgroundColor: '#e0f2fe' }]}>
+                            <CoursesIcon size={18} color="#0f172a" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.enrollmentTitle, isDark && styles.enrollmentTitleDark]}>
+                              {group.name}
+                            </Text>
+                            <Text style={[styles.enrollmentDays, isDark && styles.enrollmentDaysDark]}>
+                              {daysLabel}
+                            </Text>
+                          </View>
+                        </View>
                         {isPast ? (
                           <View style={[styles.badge, styles.pastBadge]}>
                             <Text style={styles.badgeText}>Finalizada</Text>
@@ -276,8 +331,9 @@ export default function CoursesScreen({ navigation }: any) {
                             <Text style={styles.badgeText}>Próxima</Text>
                           </View>
                         )}
-                      </View>
-                      <View style={styles.enrollmentInfo}>
+                        <Text style={styles.expandIndicator}>{expandedCount > 0 ? '▲' : '▼'}</Text>
+                      </TouchableOpacity>
+                      <View style={styles.enrollmentInfoRow}>
                         <CalendarIcon size={16} color={isDark ? '#90acbc' : '#385868'} />
                         <Text style={[styles.enrollmentDate, isDark && styles.enrollmentDateDark]}>
                           {format(parseISO(session.starts_at), "EEEE, dd 'de' MMMM 'a las' HH:mm", { locale: es })}
@@ -290,11 +346,110 @@ export default function CoursesScreen({ navigation }: any) {
                       )}
                       {!isPast && (
                         <TouchableOpacity
-                          style={styles.cancelButton}
-                          onPress={() => handleCancelEnrollment(enrollment)}
+                          style={[
+                            styles.cancelButton,
+                            differenceInHours(parseISO(session.starts_at), new Date()) < 24 && styles.cancelButtonDisabled,
+                          ]}
+                          disabled={differenceInHours(parseISO(session.starts_at), new Date()) < 24}
+                          onPress={() => {
+                            if (differenceInHours(parseISO(session.starts_at), new Date()) < 24) {
+                              Alert.alert('No se puede cancelar', 'Solo podés cancelar hasta 24h antes.');
+                              return;
+                            }
+                            handleCancelEnrollment(group.enrollment);
+                          }}
                         >
-                          <Text style={styles.cancelButtonText}>Cancelar reserva</Text>
+                          <Text
+                            style={[
+                              styles.cancelButtonText,
+                              differenceInHours(parseISO(session.starts_at), new Date()) < 24 && styles.cancelButtonTextDisabled,
+                            ]}
+                          >
+                            Cancelar próxima
+                          </Text>
                         </TouchableOpacity>
+                      )}
+                      {expandedCount > 0 && (
+                        <View style={styles.enrolledSessions}>
+                          {visibleEnrolled.map((item) => (
+                            <View
+                              key={item.session.id}
+                              style={[
+                                styles.enrolledSessionRow,
+                                isDark && styles.enrolledSessionRowDark,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.enrolledSessionText,
+                                  isDark && styles.enrolledSessionTextDark,
+                                ]}
+                              >
+                                {format(parseISO(item.session.starts_at), "eee dd MMM · HH:mm", { locale: es })}
+                              </Text>
+                              {!isPast && (
+                                <TouchableOpacity
+                                  style={[
+                                    styles.sessionCancelBtn,
+                                    !canCancelSession(item.session.starts_at) && styles.sessionCancelBtnDisabled,
+                                  ]}
+                                  disabled={!canCancelSession(item.session.starts_at)}
+                                  onPress={() => {
+                                    if (!canCancelSession(item.session.starts_at)) {
+                                      Alert.alert('No se puede cancelar', 'Solo podés cancelar hasta 24h antes.');
+                                      return;
+                                    }
+                                    handleCancelEnrollment(item.enrollment);
+                                  }}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.sessionCancelText,
+                                      !canCancelSession(item.session.starts_at) && styles.sessionCancelTextDisabled,
+                                    ]}
+                                  >
+                                    Cancelar
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          ))}
+                          {group.sessions.length > expandedCount && (
+                            <TouchableOpacity
+                              style={styles.loadMoreBtn}
+                              onPress={() =>
+                                setEnrollmentExpanded((prev) => ({
+                                  ...prev,
+                                  [group.key]: Math.min((prev[group.key] || 0) + 5, group.sessions.length),
+                                }))
+                              }
+                            >
+                              <Text style={styles.loadMoreText}>Cargar más</Text>
+                            </TouchableOpacity>
+                          )}
+                          {!isPast && (
+                            <TouchableOpacity
+                              style={styles.seriesCancelBtn}
+                              onPress={async () => {
+                                const blocked = group.sessions.some(
+                                  (s) => !canCancelSession(s.session.starts_at)
+                                );
+                                if (blocked) {
+                                  Alert.alert(
+                                    'No se puede cancelar',
+                                    'Hay sesiones a menos de 24h. Contactá al negocio para cancelar la serie.'
+                                  );
+                                  return;
+                                }
+                                for (const s of group.sessions) {
+                                  await handleCancelEnrollment(s.enrollment);
+                                }
+                              }}
+                            >
+                              <Text style={styles.seriesCancelText}>Cancelar serie</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       )}
                     </View>
                   );
@@ -302,100 +457,15 @@ export default function CoursesScreen({ navigation }: any) {
               </View>
             )}
 
-            {/* Clases Disponibles */}
+            {/* CTA a pantalla separada de Clases Disponibles */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                Clases Disponibles
-              </Text>
-              {classes.map((classSeries) => (
-                <View key={classSeries.id} style={styles.classCard}>
-                  <TouchableOpacity
-                    style={[styles.classCardContent, isDark && styles.classCardContentDark]}
-                    onPress={() => loadSessions(classSeries)}
-                  >
-                    <View style={styles.classHeader}>
-                      <Text style={[styles.className, isDark && styles.classNameDark]}>
-                        {classSeries.name}
-                      </Text>
-                      {selectedSeries?.id === classSeries.id && (
-                        <Text style={styles.expandIndicator}>▼</Text>
-                      )}
-                    </View>
-                    {classSeries.description && (
-                      <Text style={[styles.classDescription, isDark && styles.classDescriptionDark]}>
-                        {classSeries.description}
-                      </Text>
-                    )}
-                    {classSeries.instructor_name && (
-                      <Text style={[styles.classInstructor, isDark && styles.classInstructorDark]}>
-                        Instructor: {classSeries.instructor_name}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-
-                  {selectedSeries?.id === classSeries.id && (
-                    <View style={styles.sessionsContainer}>
-                      {loadingSessions ? (
-                        <ActivityIndicator size="small" color={ARJA_PRIMARY_START} />
-                      ) : sessions.length === 0 ? (
-                        <Text style={[styles.noSessionsText, isDark && styles.noSessionsTextDark]}>
-                          No hay sesiones disponibles
-                        </Text>
-                      ) : (
-                        sessions.map((session) => {
-                          const enrolled = isEnrolled(session.id);
-                          const past = isSessionPast(session);
-                          const full = isSessionFull(session);
-
-                          return (
-                            <View
-                              key={session.id}
-                              style={[styles.sessionCard, isDark && styles.sessionCardDark]}
-                            >
-                              <View style={styles.sessionInfo}>
-                                <CalendarIcon size={16} color={isDark ? '#90acbc' : '#385868'} />
-                                <View style={styles.sessionDetails}>
-                                  <Text style={[styles.sessionDate, isDark && styles.sessionDateDark]}>
-                                    {format(parseISO(session.starts_at), "EEEE, dd 'de' MMMM", { locale: es })}
-                                  </Text>
-                                  <Text style={[styles.sessionTime, isDark && styles.sessionTimeDark]}>
-                                    {format(parseISO(session.starts_at), 'HH:mm')} -{' '}
-                                    {format(parseISO(session.ends_at), 'HH:mm')}
-                                  </Text>
-                                  {session.max_capacity && (
-                                    <Text style={[styles.sessionCapacity, isDark && styles.sessionCapacityDark]}>
-                                      {session.current_enrollments || 0}/{session.max_capacity} cupos
-                                    </Text>
-                                  )}
-                                </View>
-                              </View>
-                              {!past && (
-                                <TouchableOpacity
-                                  style={[
-                                    styles.enrollButton,
-                                    (enrolled || full) && styles.enrollButtonDisabled,
-                                  ]}
-                                  onPress={() => handleEnroll(session)}
-                                  disabled={enrolled || full}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.enrollButtonText,
-                                      (enrolled || full) && styles.enrollButtonTextDisabled,
-                                    ]}
-                                  >
-                                    {enrolled ? 'Inscrito' : full ? 'Llena' : 'Reservar'}
-                                  </Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          );
-                        })
-                      )}
-                    </View>
-                  )}
-                </View>
-              ))}
+              <TouchableOpacity
+                style={styles.availableCta}
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('AvailableClasses' as never)}
+              >
+                <Text style={styles.availableCtaText}>Ver clases disponibles</Text>
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -424,22 +494,47 @@ const styles = StyleSheet.create({
   loadingTextDark: {
     color: '#90acbc',
   },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 20,
+  headerGradient: {
+    paddingTop: 52,
+    paddingBottom: 14,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  headerContent: {
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerOnGradient: {
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#ffffff',
+    fontWeight: 'bold',
   },
   headerTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  placeholder: {
+    width: 40,
   },
   headerTitle: {
     fontSize: 28,
@@ -491,25 +586,87 @@ const styles = StyleSheet.create({
   sectionTitleDark: {
     color: '#e6f2f8',
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sectionBadge: {
+    minWidth: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+  },
+  sectionBadgeText: {
+    color: '#075985',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  primaryCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+  },
+  primaryCtaText: {
+    color: '#0f172a',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  availableCta: {
+    backgroundColor: ARJA_PRIMARY_START,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  availableCtaText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   enrollmentCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    padding: 14,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
     elevation: 2,
   },
   enrollmentCardDark: {
     backgroundColor: '#1e2f3f',
+    borderRadius: 14,
+    padding: 14,
   },
   enrollmentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  enrollmentHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  enrollmentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   enrollmentTitle: {
     fontSize: 18,
@@ -526,21 +683,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   pastBadge: {
-    backgroundColor: '#6b7280',
+    backgroundColor: '#e5e7eb',
   },
   upcomingBadge: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#dcfce7',
   },
   badgeText: {
-    color: '#ffffff',
+    color: '#111827',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   enrollmentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 8,
+  },
+  enrollmentInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
   },
   enrollmentDate: {
     fontSize: 14,
@@ -557,6 +720,68 @@ const styles = StyleSheet.create({
   enrollmentInstructorDark: {
     color: '#9ca3af',
   },
+  enrollmentDays: {
+    fontSize: 13,
+    color: '#4b5563',
+    marginBottom: 6,
+  },
+  enrollmentDaysDark: {
+    color: '#9ca3af',
+  },
+  enrolledSessions: {
+    marginTop: 8,
+    gap: 6,
+  },
+  enrolledSessionRow: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  enrolledSessionRowDark: {
+    backgroundColor: '#132235',
+  },
+  enrolledSessionTextDark: {
+    color: '#e5e7eb',
+  },
+  enrolledSessionText: {
+    fontSize: 13,
+    color: '#111827',
+  },
+  sessionCancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#fee2e2',
+  },
+  sessionCancelBtnDisabled: {
+    backgroundColor: '#f3f4f6',
+  },
+  sessionCancelText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b91c1c',
+  },
+  sessionCancelTextDisabled: {
+    color: '#6b7280',
+  },
+  seriesCancelBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  seriesCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#b91c1c',
+  },
   cancelButton: {
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -568,6 +793,64 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 14,
     fontWeight: '600',
+  },
+  cancelButtonDisabled: {
+    opacity: 0.5,
+  },
+  cancelButtonTextDisabled: {
+    color: '#9ca3af',
+  },
+  bulkButton: {
+    marginTop: 8,
+    backgroundColor: ARJA_PRIMARY_START,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bulkButtonDisabled: {
+    opacity: 0.5,
+  },
+  bulkButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  loadMoreBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  loadMoreText: {
+    color: ARJA_PRIMARY_START,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  filterPillActive: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#38bdf8',
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  filterPillTextActive: {
+    color: '#0369a1',
   },
   classCard: {
     marginBottom: 16,
@@ -600,6 +883,14 @@ const styles = StyleSheet.create({
   classNameDark: {
     color: '#e6f2f8',
   },
+  classMeta: {
+    fontSize: 13,
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  classMetaDark: {
+    color: '#e5e7eb',
+  },
   expandIndicator: {
     fontSize: 16,
     color: ARJA_PRIMARY_START,
@@ -618,6 +909,14 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   classInstructorDark: {
+    color: '#9ca3af',
+  },
+  classHint: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  classHintDark: {
     color: '#9ca3af',
   },
   sessionsContainer: {
@@ -656,6 +955,13 @@ const styles = StyleSheet.create({
   sessionDetails: {
     flex: 1,
   },
+  sessionMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    flexWrap: 'wrap',
+  },
   sessionDate: {
     fontSize: 14,
     fontWeight: '600',
@@ -665,20 +971,27 @@ const styles = StyleSheet.create({
   sessionDateDark: {
     color: '#e6f2f8',
   },
-  sessionTime: {
-    fontSize: 13,
-    color: '#385868',
-    marginBottom: 4,
+  sessionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#e0f2fe',
   },
-  sessionTimeDark: {
-    color: '#90acbc',
-  },
-  sessionCapacity: {
+  sessionPillText: {
     fontSize: 12,
-    color: '#6b7280',
+    fontWeight: '700',
+    color: '#075985',
   },
-  sessionCapacityDark: {
-    color: '#9ca3af',
+  sessionPillGhost: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+  },
+  sessionPillGhostText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4b5563',
   },
   enrollButton: {
     paddingVertical: 8,
