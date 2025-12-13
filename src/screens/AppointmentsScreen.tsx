@@ -216,13 +216,6 @@ export default function AppointmentsScreen() {
               {appt.service_name || 'Servicio'}
             </Text>
           </View>
-          <View style={styles.cardHeaderCenter}>
-            {appt.deposit_decimal && appt.deposit_decimal > 0 && (
-              <Text style={[styles.depositBadge, isDarkMode && styles.depositBadgeDark]}>
-                Seña: ${appt.deposit_decimal}
-              </Text>
-            )}
-          </View>
           <View style={styles.cardHeaderRight}>
             <View style={[styles.statusPill, { backgroundColor: `${statusColor}20` }]}>
               <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
