@@ -208,7 +208,11 @@ export default function AppointmentsScreen() {
       <View key={appt.id} style={[styles.card, isDarkMode && styles.cardDark]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
-            <Text style={[styles.cardTitle, isDarkMode && styles.cardTitleDark]}>
+            <Text 
+              style={[styles.cardTitle, isDarkMode && styles.cardTitleDark]}
+              numberOfLines={3}
+              ellipsizeMode="tail"
+            >
               {appt.service_name || 'Servicio'}
             </Text>
           </View>
@@ -217,17 +221,6 @@ export default function AppointmentsScreen() {
               <Text style={[styles.depositBadge, isDarkMode && styles.depositBadgeDark]}>
                 Seña: ${appt.deposit_decimal}
               </Text>
-            )}
-            {canCancel && (
-              <TouchableOpacity
-                style={[styles.cancelButtonHeader, isDarkMode && styles.cancelButtonHeaderDark]}
-                onPress={() => handleCancel(appt)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.cancelButtonHeaderText, isDarkMode && styles.cancelButtonHeaderTextDark]}>
-                  Cancelar
-                </Text>
-              </TouchableOpacity>
             )}
           </View>
           <View style={styles.cardHeaderRight}>
@@ -258,10 +251,25 @@ export default function AppointmentsScreen() {
             })()}
           </View>
         </View>
-        <Text style={[styles.cardSubtitle, isDarkMode && styles.cardSubtitleDark]}>
-          {appt.instructor_name ? `Con ${appt.instructor_name}` : 'Sin asignar'}
-        </Text>
-        <Text style={[styles.cardDate, isDarkMode && styles.cardDateDark]}>{formatDate(appt.starts_at)}</Text>
+        <View style={styles.cardHeaderBottom}>
+          <View style={styles.cardHeaderBottomLeft}>
+            <Text style={[styles.cardSubtitle, isDarkMode && styles.cardSubtitleDark]}>
+              {appt.instructor_name ? `Con ${appt.instructor_name}` : 'Sin asignar'}
+            </Text>
+            <Text style={[styles.cardDate, isDarkMode && styles.cardDateDark]}>{formatDate(appt.starts_at)}</Text>
+          </View>
+          {canCancel && (
+            <TouchableOpacity
+              style={[styles.cancelButtonHeader, isDarkMode && styles.cancelButtonHeaderDark]}
+              onPress={() => handleCancel(appt)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.cancelButtonHeaderText, isDarkMode && styles.cancelButtonHeaderTextDark]}>
+                Cancelar
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <View style={styles.cardActions}>
           {appt.status === 'pending_deposit' && appt.deposit_decimal && appt.deposit_decimal > 0 && !appt.deposit_paid_at && (
             <View style={styles.depositPaymentContainer}>
@@ -501,29 +509,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cancelButtonHeader: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: '#78350f',
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#f59e0b',
+    borderColor: '#92400e',
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButtonHeaderDark: {
-    backgroundColor: '#78350f',
-    borderColor: '#f59e0b',
+    backgroundColor: '#451a03',
+    borderColor: '#78350f',
   },
   cancelButtonHeaderText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#f59e0b',
+    fontWeight: '700',
+    color: '#ffffff',
   },
   cancelButtonHeaderTextDark: {
-    color: '#fbbf24',
+    color: '#ffffff',
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#0f172a',
+    lineHeight: 20,
   },
   cardTitleDark: {
     color: '#e6f2f8',
@@ -532,12 +544,21 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  cardHeaderBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginTop: 8,
+  },
+  cardHeaderBottomLeft: {
+    flex: 1,
+  },
   cardHeaderCenter: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
     flexDirection: 'column',
-    gap: 6,
-    marginHorizontal: 8,
+    gap: 4,
+    marginRight: 8,
   },
   depositBadge: {
     fontSize: 12,
