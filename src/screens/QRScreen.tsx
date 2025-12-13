@@ -17,7 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
+import { useAppSettingsStore } from '../store/useAppSettingsStore';
 import { QRCodeIcon } from '../components/Icons';
 
 const ARJA_PRIMARY_START = '#13b5cf';
@@ -29,6 +30,7 @@ export default function QRScreen() {
   const { isDark } = useAppTheme();
   const { customerId, tenantId, phone } = useAuthStore();
   const { features, loadFeatures, hasFeature } = useTenantStore();
+  const { logoUrl } = useAppSettingsStore();
   const [qrData, setQrData] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,13 +46,15 @@ export default function QRScreen() {
   }, [customerId, tenantId, phone, features]);
 
   const loadQRData = async () => {
-    if (!customerId || !tenantId || !phone) {
+    if (!customerId || !tenantId) {
+      console.log('[QRScreen] Faltan customerId o tenantId:', { customerId, tenantId });
       setLoading(false);
       return;
     }
 
     // Verificar si el tenant tiene QR scanner habilitado
     if (!hasFeature('has_qr_scanner')) {
+      console.log('[QRScreen] QR scanner no habilitado para este tenant');
       setLoading(false);
       return;
     }
@@ -58,16 +62,19 @@ export default function QRScreen() {
     try {
       // Generar un código QR único para el usuario
       // El código contiene información del cliente y tenant para validación
+      // Si no hay phone, usamos customerId como identificador alternativo
       const qrPayload = JSON.stringify({
         customer_id: customerId,
         tenant_id: tenantId,
-        phone: phone.replace(/\D/g, ''),
+        phone: phone ? phone.replace(/\D/g, '') : null,
+        identifier: phone ? phone.replace(/\D/g, '') : `customer_${customerId}`,
         timestamp: Date.now(),
       });
       
+      console.log('[QRScreen] QR generado exitosamente');
       setQrData(qrPayload);
     } catch (error) {
-      console.error('Error generando QR:', error);
+      console.error('[QRScreen] Error generando QR:', error);
       Alert.alert('Error', 'No se pudo generar el código QR');
     } finally {
       setLoading(false);
@@ -141,10 +148,13 @@ export default function QRScreen() {
                 size={QR_SIZE}
                 color={isDark ? '#e6f2f8' : '#051420'}
                 backgroundColor={isDark ? '#1e2f3f' : '#ffffff'}
-                logoSize={60}
-                logoBackgroundColor="transparent"
-                logoMargin={8}
-                logoBorderRadius={30}
+                {...(logoUrl ? {
+                  logo: { uri: logoUrl },
+                  logoSize: 60,
+                  logoBackgroundColor: 'transparent',
+                  logoMargin: 8,
+                  logoBorderRadius: 30,
+                } : {})}
               />
             ) : (
               <View style={styles.qrPlaceholder}>

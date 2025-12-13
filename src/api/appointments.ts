@@ -14,6 +14,9 @@ export interface Appointment {
   service_name?: string;
   instructor_name?: string;
   customer_name?: string;
+  deposit_decimal?: number;
+  deposit_paid_at?: string;
+  created_at?: string;
 }
 
 export interface CreateAppointmentData {
@@ -29,10 +32,10 @@ export const appointmentsAPI = {
   /**
    * Obtener turnos del cliente
    */
-  getMyAppointments: async (phone: string, tenantId: number): Promise<Appointment[]> => {
-    const response = await apiClient.get('/api/appointments', {
+  getMyAppointments: async (customerId: number, tenantId: number): Promise<Appointment[]> => {
+    const response = await apiClient.get('/api/public/customer/appointments', {
       params: {
-        phone: phone.replace(/\D/g, ''), // Solo números
+        customer_id: customerId,
         tenant_id: tenantId,
       },
     });
@@ -42,8 +45,8 @@ export const appointmentsAPI = {
   /**
    * Crear nuevo turno
    */
-  createAppointment: async (data: CreateAppointmentData): Promise<Appointment> => {
-    const response = await apiClient.post('/api/appointments', data);
+  createAppointment: async (data: CreateAppointmentData): Promise<{ ok: boolean; data: Appointment; requiresDeposit: boolean }> => {
+    const response = await apiClient.post('/api/public/customer/appointments', data);
     return response.data;
   },
 
@@ -58,8 +61,13 @@ export const appointmentsAPI = {
   /**
    * Cancelar turno
    */
-  cancelAppointment: async (id: number): Promise<void> => {
-    await apiClient.delete(`/api/appointments/${id}`);
+  cancelAppointment: async (id: number, tenantId: number, customerId: number): Promise<void> => {
+    await apiClient.delete(`/api/public/customer/appointments/${id}`, {
+      params: {
+        tenant_id: tenantId,
+        customer_id: customerId,
+      },
+    });
   },
 
   /**
@@ -70,8 +78,8 @@ export const appointmentsAPI = {
     serviceId: number,
     instructorId: number,
     date: string
-  ): Promise<any> => {
-    const response = await apiClient.get('/api/availability', {
+  ): Promise<{ ok: boolean; data: { slots: string[]; busySlots: string[] } }> => {
+    const response = await apiClient.get('/api/public/customer/appointments/availability', {
       params: {
         tenant_id: tenantId,
         service_id: serviceId,
@@ -79,6 +87,24 @@ export const appointmentsAPI = {
         date,
       },
     });
+    return response.data;
+  },
+
+  /**
+   * Generar link de pago de seña
+   */
+  getDepositPaymentLink: async (
+    appointmentId: number,
+    tenantId: number,
+    customerId: number
+  ): Promise<{ ok: boolean; paymentLink: string }> => {
+    const response = await apiClient.post(
+      `/api/public/customer/appointments/${appointmentId}/deposit-payment-link`,
+      {
+        tenant_id: tenantId,
+        customer_id: customerId,
+      }
+    );
     return response.data;
   },
 };

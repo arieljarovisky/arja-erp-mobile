@@ -69,5 +69,12 @@ export const appSettingsAPI = {
   saveMyPushToken: async (pushToken: string): Promise<void> => {
     await apiClient.put('/api/customers/app-settings/me/push-token', { pushToken });
   },
+
+  updateMyPicture: async (picture: string): Promise<void> => {
+    const resp = await apiClient.put('/api/customers/app-settings/me/picture', { picture });
+    if (!resp.data?.ok) {
+      throw new Error(resp.data?.error || 'Error al actualizar foto de perfil');
+    }
+  },
 };
 

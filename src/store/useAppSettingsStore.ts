@@ -65,10 +65,11 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
           push: data?.notifications?.push ?? true,
           inApp: data?.notifications?.inApp ?? true,
           features: {
-            routines: data?.notifications?.features?.routines ?? DEFAULT_FEATURES.routines,
-            classes: data?.notifications?.features?.classes ?? DEFAULT_FEATURES.classes,
-            qr: data?.notifications?.features?.qr ?? DEFAULT_FEATURES.qr,
-            notifications: data?.notifications?.features?.notifications ?? DEFAULT_FEATURES.notifications,
+            // Usar los valores del backend, o false si no vienen definidos
+            routines: data?.notifications?.features?.routines ?? false,
+            classes: data?.notifications?.features?.classes ?? false,
+            qr: data?.notifications?.features?.qr ?? false,
+            notifications: data?.notifications?.features?.notifications ?? false,
           },
         },
       };

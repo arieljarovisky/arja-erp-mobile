@@ -15,7 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { BellIcon } from '../components/Icons';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { notificationsAPI, NotificationItem } from '../api/notifications';
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';

@@ -8,11 +8,14 @@ import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-nativ
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
+import { useThemeStore } from '../store/useThemeStore';
 import { useAppSettingsStore, selectPrimaryColor, selectFeatureFlags } from '../store/useAppSettingsStore';
 import { HomeIcon, BellIcon, QRCodeIcon, CalendarIcon, RoutinesIcon, CoursesIcon } from '../components/Icons';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -20,6 +23,7 @@ import HomeScreen from '../screens/HomeScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import QRScreen from '../screens/QRScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
+import BookAppointmentScreen from '../screens/BookAppointmentScreen';
 import MembershipsScreen from '../screens/MembershipsScreen';
 import RoutinesScreen from '../screens/RoutinesScreen';
 import CreateWorkoutRoutineScreen from '../screens/CreateWorkoutRoutineScreen';
@@ -29,6 +33,7 @@ import CoursesScreen from '../screens/CoursesScreen';
 import AvailableClassesScreen from '../screens/AvailableClassesScreen';
 import TenantNotFoundScreen from '../screens/TenantNotFoundScreen';
 import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 
@@ -75,6 +80,7 @@ function AppointmentsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AppointmentsMain" component={AppointmentsScreen} />
+      <Stack.Screen name="BookAppointment" component={BookAppointmentScreen} />
     </Stack.Navigator>
   );
 }
@@ -93,9 +99,24 @@ function MainTabs() {
   const isDarkMode = Boolean(isDark);
   const primaryColor = useAppSettingsStore(selectPrimaryColor);
   const featureFlags = useAppSettingsStore(selectFeatureFlags);
-   const tenantFeatures = useTenantStore(state => state.features);
+  const tenantFeatures = useTenantStore(state => state.features);
+  const insets = useSafeAreaInsets();
   
-  const tabs = [
+  // Debug: Log de features del tenant
+  useEffect(() => {
+    console.log('[MainTabs] ═══════════════════════════════════════');
+    console.log('[MainTabs] Tenant features completas:', JSON.stringify(tenantFeatures, null, 2));
+    console.log('[MainTabs] QR scanner habilitado:', tenantFeatures?.has_qr_scanner);
+    console.log('[MainTabs] Tipo de has_qr_scanner:', typeof tenantFeatures?.has_qr_scanner);
+    console.log('[MainTabs] Valor booleano de has_qr_scanner:', Boolean(tenantFeatures?.has_qr_scanner));
+    console.log('[MainTabs] Clases habilitadas:', tenantFeatures?.has_classes);
+    console.log('[MainTabs] Rutinas habilitadas:', tenantFeatures?.has_routines);
+    console.log('[MainTabs] Feature flags:', featureFlags);
+    console.log('[MainTabs] ═══════════════════════════════════════');
+  }, [tenantFeatures, featureFlags]);
+  
+  // Definir todos los tabs posibles
+  const allTabs = [
     {
       key: 'home',
       name: 'Inicio',
@@ -112,20 +133,18 @@ function MainTabs() {
       filled: true,
     },
     {
-      key: 'qr',
-      name: 'QRTab',
-      label: ' ',
-      component: QRStack,
-      icon: QRCodeIcon,
-      feature: featureFlags.qr,
-      isQr: true,
-    },
-    {
       key: 'routines',
       name: 'Rutinas',
       component: RoutinesStack,
       icon: RoutinesIcon,
-      feature: featureFlags.routines && (tenantFeatures?.has_routines ?? true),
+      feature: tenantFeatures?.has_routines ?? false,
+    },
+    {
+      key: 'classes',
+      name: 'Clases',
+      component: ClassesStack,
+      icon: CoursesIcon,
+      feature: tenantFeatures?.has_classes ?? false,
     },
     {
       key: 'appointments',
@@ -134,7 +153,50 @@ function MainTabs() {
       icon: CalendarIcon,
       feature: true,
     },
-  ].filter(t => t.feature);
+  ];
+
+  // Filtrar tabs habilitados (sin el QR)
+  const enabledTabs = allTabs.filter(t => t.feature);
+  
+  // Verificar si el QR está habilitado
+  const qrEnabled = Boolean(tenantFeatures?.has_qr_scanner);
+  
+  // Debug: Log detallado del estado del QR
+  useEffect(() => {
+    console.log('[MainTabs] ═══════════════════════════════════════');
+    console.log('[MainTabs] Estado del QR:');
+    console.log('[MainTabs] - tenantFeatures:', tenantFeatures);
+    console.log('[MainTabs] - tenantFeatures?.has_qr_scanner:', tenantFeatures?.has_qr_scanner);
+    console.log('[MainTabs] - qrEnabled:', qrEnabled);
+    console.log('[MainTabs] - Tipo de has_qr_scanner:', typeof tenantFeatures?.has_qr_scanner);
+    console.log('[MainTabs] - tenantFeatures es null?:', tenantFeatures === null);
+    console.log('[MainTabs] ═══════════════════════════════════════');
+  }, [tenantFeatures, qrEnabled]);
+  
+  // Calcular la posición del QR en el medio
+  const leftTabsCount = Math.floor(enabledTabs.length / 2);
+  const leftTabs = enabledTabs.slice(0, leftTabsCount);
+  const rightTabs = enabledTabs.slice(leftTabsCount);
+  
+  // Construir el array final con el QR en el medio
+  const tabs = [
+    ...leftTabs,
+    ...(qrEnabled ? [{
+      key: 'qr',
+      name: 'QRTab',
+      label: ' ',
+      component: QRStack,
+      icon: QRCodeIcon,
+      feature: true,
+      isQr: true,
+    }] : []),
+    ...rightTabs,
+  ];
+  
+  // Debug: Log de tabs finales
+  useEffect(() => {
+    console.log('[MainTabs] Tabs finales:', tabs.map(t => ({ key: t.key, name: t.name, isQr: t.isQr })));
+  }, [tabs]);
 
   return (
     <Tab.Navigator
@@ -147,9 +209,14 @@ function MainTabs() {
           backgroundColor: isDarkMode ? '#1e2f3f' : '#ffffff',
           borderTopWidth: 1,
           borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-          height: Platform.OS === 'ios' ? 90 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+          height: (Platform.OS === 'ios' ? 60 : 60) + (insets.bottom || 0),
+          paddingBottom: insets.bottom || (Platform.OS === 'ios' ? 20 : 10),
           paddingTop: 8,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -193,13 +260,22 @@ function MainTabs() {
   );
 }
 
+// Componente interno que usa el hook de notificaciones dentro del NavigationContainer
+function PushNotificationsHandler() {
+  usePushNotifications();
+  return null;
+}
+
 export default function AppNavigator() {
-  const { isAuthenticated, checkAuth } = useAuthStore();
-  const { tenantNotFound } = useTenantStore();
+  const { isAuthenticated, checkAuth, tenantId } = useAuthStore();
+  const { tenantNotFound, loadFeatures, features } = useTenantStore();
   const [isReady, setIsReady] = useState(false);
   const fetchSettings = useAppSettingsStore(state => state.fetchSettings);
 
   useEffect(() => {
+    // Cargar tema al iniciar
+    useThemeStore.getState().loadTheme();
+    
     // Verificar autenticación al montar
     const initAuth = async () => {
       try {
@@ -220,15 +296,33 @@ export default function AppNavigator() {
   
   // Log para debugging
   useEffect(() => {
-    console.log('[AppNavigator] Estado de autenticación:', { isAuthenticated, authStatus, tenantNotFound });
-  }, [isAuthenticated, authStatus, tenantNotFound]);
+    console.log('[AppNavigator] Estado de autenticación:', { 
+      isAuthenticated, 
+      authStatus, 
+      tenantNotFound,
+      tenantId,
+      features: features ? JSON.stringify(features) : 'null'
+    });
+  }, [isAuthenticated, authStatus, tenantNotFound, tenantId, features]);
 
-  // Cargar configuraciones de app (tema/branding) cuando el usuario esté autenticado
+  // Cargar configuraciones de app (tema/branding) y features del tenant cuando el usuario esté autenticado
   useEffect(() => {
-    if (authStatus) {
+    console.log('[AppNavigator] useEffect para cargar features - authStatus:', authStatus, 'tenantId:', tenantId);
+    if (authStatus && tenantId) {
+      console.log('[AppNavigator] ✅ Condiciones cumplidas, cargando features para tenant:', tenantId);
       fetchSettings().catch(() => {});
+      // Cargar features del tenant
+      loadFeatures(tenantId)
+        .then(() => {
+          console.log('[AppNavigator] ✅ Features cargadas exitosamente');
+        })
+        .catch((error) => {
+          console.error('[AppNavigator] ❌ Error cargando features del tenant:', error);
+        });
+    } else {
+      console.log('[AppNavigator] ⚠️ No se cargan features - authStatus:', authStatus, 'tenantId:', tenantId);
     }
-  }, [authStatus, fetchSettings]);
+  }, [authStatus, tenantId, fetchSettings, loadFeatures]);
 
   // Mostrar loading mientras se verifica la autenticación
   // Nunca retornar null, siempre retornar un componente válido
@@ -262,6 +356,8 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer key={navigationKey}>
+      {/* Inicializar notificaciones push dentro del NavigationContainer */}
+      <PushNotificationsHandler />
       <Stack.Navigator 
         screenOptions={{ headerShown: false }}
         initialRouteName={initialRoute}
@@ -308,6 +404,20 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Classes" 
         component={ClassesStack}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="WorkoutRoutineDetail" 
+        component={WorkoutRoutineDetailScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="Settings" 
+        component={SettingsScreen}
         options={{ 
           headerShown: false,
         }}

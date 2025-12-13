@@ -19,7 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { ArjaLogo } from '../components/ArjaLogo';
 import apiClient from '../api/client';
 

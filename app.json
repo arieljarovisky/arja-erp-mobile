@@ -28,7 +28,26 @@
     },
     "scheme": "arja-erp",
     "plugins": [
-      "react-native-vector-image"
-    ]
+      "react-native-vector-image",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#13b5cf",
+          "sounds": []
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#13b5cf"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0515b7c7-ac93-4574-943e-9091a4f18770"
+      }
+    },
+    "owner": "jaroviskyariel"
   }
 }

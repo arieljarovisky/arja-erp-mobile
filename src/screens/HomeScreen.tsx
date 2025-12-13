@@ -18,9 +18,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { useAppSettingsStore, selectFeatureFlags, selectThemeColors } from '../store/useAppSettingsStore';
-import { CalendarIcon, PlusIcon, ClassesIcon, CreditCardIcon, UserIcon, RoutinesIcon, BellIcon, CoursesIcon } from '../components/Icons';
+import { CalendarIcon, PlusIcon, ClassesIcon, CreditCardIcon, UserIcon, RoutinesIcon, BellIcon, CoursesIcon, SettingsIcon } from '../components/Icons';
 import { appointmentsAPI, Appointment } from '../api/appointments';
 import { classesAPI, ClassEnrollment } from '../api/classes';
 import { membershipsAPI, MembershipSubscription } from '../api/memberships';
@@ -36,7 +36,8 @@ interface HomeScreenProps {
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { isDark } = useAppTheme();
-  const { customerName, phone, tenantId, customerId, clearAuth } = useAuthStore();
+  const isDarkMode = Boolean(isDark);
+  const { customerName, phone, tenantId, customerId, picture, clearAuth } = useAuthStore();
   const { loadFeatures, clearFeatures, features: tenantFeatures } = useTenantStore();
   const featureFlags = useAppSettingsStore((state) => selectFeatureFlags(state));
   const themeColors = useAppSettingsStore((state) => selectThemeColors(state));
@@ -194,8 +195,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   };
   
   return (
-    <View style={[styles.screen, { backgroundColor: themeColors.background }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+    <View style={[styles.screen, isDarkMode && styles.screenDark, { backgroundColor: isDarkMode ? '#0e1c2c' : themeColors.background }]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -212,7 +213,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       >
         {/* Encabezado */}
         <LinearGradient
-          colors={[themeColors.primary, themeColors.secondary || themeColors.primary]}
+          colors={['#0d7fd4', '#13b5cf']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.hero}
@@ -220,7 +221,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <View style={styles.heroTop}>
             <View style={styles.avatarRow}>
               <View style={styles.avatar}>
-                {themeColors.logoUrl ? (
+                {picture ? (
+                  <Image source={{ uri: picture }} style={styles.avatarImg} resizeMode="cover" />
+                ) : themeColors.logoUrl ? (
                   <Image source={{ uri: themeColors.logoUrl }} style={styles.avatarImg} resizeMode="cover" />
                 ) : (
                   <Text style={styles.avatarText}>{(customerName || 'C').charAt(0)}</Text>
@@ -231,68 +234,118 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 <Text style={styles.userName}>{customerName || phone || 'Cliente'}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.notifBadge} activeOpacity={0.8}>
-              <BellIcon size={22} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={[styles.taskCard, styles.taskCardFlat]}>
-            <Text style={styles.taskTitle}>
-              {nextAppointment
-                ? 'Tu próximo turno'
-                : routine
-                  ? 'Rutina asignada'
-                  : 'Sin turnos por ahora'}
-            </Text>
-            <Text style={styles.taskSubtitle}>
-              {nextAppointment
-                ? `${nextAppointment.service_name || 'Servicio'} · ${formatDate(nextAppointment.starts_at)}`
-                : routine
-                  ? routine.name
-                  : 'Agenda un turno y seguí tu progreso'}
-            </Text>
-            <View style={styles.taskRow}>
-              <TouchableOpacity
-                style={styles.taskButton}
-                activeOpacity={0.9}
+            <View style={styles.headerRight}>
+              <TouchableOpacity 
+                style={styles.settingsButton} 
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Settings' as never)}
+              >
+                <SettingsIcon size={20} color="#ffffff" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.notifBadge} 
+                activeOpacity={0.8}
                 onPress={() => {
-                  if (nextAppointment) {
-                    navigation.navigate('Turnos');
+                  // Navegar al tab de Notificaciones usando el navegador padre (Tab Navigator)
+                  const tabNavigator = navigation.getParent()?.getParent();
+                  if (tabNavigator) {
+                    tabNavigator.navigate('Notificaciones' as never);
                   } else {
-                    navigation.navigate('Turnos');
+                    // Fallback: intentar con el padre directo
+                    const parent = navigation.getParent();
+                    if (parent) {
+                      parent.navigate('Notificaciones' as never);
+                    } else {
+                      navigation.navigate('Notificaciones' as never);
+                    }
                   }
                 }}
               >
-                <Text style={styles.taskButtonText}>
-                  {nextAppointment ? 'Ver turno' : 'Reservar turno'}
-                </Text>
+                <BellIcon size={22} color="#ffffff" />
               </TouchableOpacity>
-              <View style={styles.progressOuter}>
-                <View style={styles.progressInner}>
-                  <Text style={styles.progressText}>
-                    {nextAppointment ? 'Próx' : routine ? 'Rut' : '0%'}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.moreBtn}>
-                <Text style={styles.moreBtnText}>···</Text>
-              </View>
             </View>
           </View>
+
+          {/* Card principal: muestra turno próximo o rutina activa */}
+          {(nextAppointment || routine) && (
+            <View style={[styles.taskCard, styles.taskCardFlat]}>
+              {nextAppointment ? (
+                <>
+                  <View style={styles.taskHeader}>
+                    <View style={styles.taskHeaderLeft}>
+                      <Text style={styles.taskLabel}>Próximo turno</Text>
+                      <Text style={styles.taskTitle}>
+                        {nextAppointment.service_name || 'Servicio'}
+                      </Text>
+                      <Text style={styles.taskSubtitle}>
+                        {formatDate(nextAppointment.starts_at)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.taskButton}
+                      activeOpacity={0.9}
+                      onPress={() => navigation.navigate('Turnos')}
+                    >
+                      <Text style={styles.taskButtonText}>Ver</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : routine ? (
+                <>
+                  <View style={styles.taskHeader}>
+                    <View style={styles.taskHeaderLeft}>
+                      <Text style={styles.taskLabel}>Rutina activa</Text>
+                      <Text style={styles.taskTitle} numberOfLines={1}>
+                        {routine.name}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.taskButton}
+                      activeOpacity={0.9}
+                      onPress={() => navigation.navigate('WorkoutRoutineDetail' as never, { routineId: routine.id } as never)}
+                    >
+                      <Text style={styles.taskButtonText}>Ver</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : null}
+            </View>
+          )}
+          
+          {/* Si no hay turno ni rutina, mostrar CTA para reservar */}
+          {!nextAppointment && !routine && (
+            <View style={[styles.taskCard, styles.taskCardFlat]}>
+              <View style={styles.taskHeader}>
+                <View style={styles.taskHeaderLeft}>
+                  <Text style={styles.taskLabel}>¡Empezá ahora!</Text>
+                  <Text style={styles.taskTitle}>
+                    Reservá tu primer turno
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.taskButton}
+                  activeOpacity={0.9}
+                  onPress={() => navigation.navigate('Turnos')}
+                >
+                  <Text style={styles.taskButtonText}>Reservar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </LinearGradient>
 
         {/* Próximos */}
         <View style={styles.sectionBlock}>
-          <Text style={styles.sectionTitle}>Próximos</Text>
+          <Text style={[styles.sectionTitle, isDarkMode && styles.sectionTitleDark]}>Próximos</Text>
           <View style={styles.stackCards}>
-            <View style={[styles.stackCard, { borderColor: `${themeColors.primary}25` }]}>
+            <View style={[styles.stackCard, isDarkMode && styles.stackCardDark, { borderColor: `${themeColors.primary}25` }]}>
               <View style={styles.stackLeft}>
                 <View style={[styles.stackIcon, { backgroundColor: `${themeColors.primary}15` }]}>
                   <CalendarIcon size={20} color={themeColors.primary} />
                 </View>
                 <View style={styles.stackTextCol}>
-                  <Text style={styles.stackTitle}>Turno próximo</Text>
-                  <Text style={styles.stackSubtitle}>
+                  <Text style={[styles.stackTitle, isDarkMode && styles.stackTitleDark]}>Turno próximo</Text>
+                  <Text style={[styles.stackSubtitle, isDarkMode && styles.stackSubtitleDark]}>
                     {nextAppointment ? formatDate(nextAppointment.starts_at) : 'Sin turnos'}
                   </Text>
                 </View>
@@ -306,19 +359,19 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.stackCard, { borderColor: `${themeColors.secondary || themeColors.primary}25` }]}>
+            <View style={[styles.stackCard, isDarkMode && styles.stackCardDark, { borderColor: '#13b5cf25' }]}>
               <View style={styles.stackLeft}>
                 <View
                   style={[
                     styles.stackIcon,
-                    { backgroundColor: `${themeColors.secondary || themeColors.primary}15` },
+                    { backgroundColor: '#13b5cf15' },
                   ]}
                 >
-                  <CoursesIcon size={20} color={themeColors.secondary || themeColors.primary} />
+                  <CoursesIcon size={20} color="#13b5cf" />
                 </View>
                 <View style={styles.stackTextCol}>
-                  <Text style={styles.stackTitle}>Próxima clase</Text>
-                  <Text style={styles.stackSubtitle}>
+                  <Text style={[styles.stackTitle, isDarkMode && styles.stackTitleDark]}>Próxima clase</Text>
+                  <Text style={[styles.stackSubtitle, isDarkMode && styles.stackSubtitleDark]}>
                     {nextClass?.session
                       ? `${nextClass.session.series_name || 'Clase'} · ${formatDate(nextClass.session.starts_at)}`
                       : 'Sin clases reservadas'}
@@ -326,7 +379,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.stackCta, { backgroundColor: themeColors.secondary || themeColors.primary }]}
+                style={[styles.stackCta, { backgroundColor: '#13b5cf' }]}
                 onPress={() => navigation.navigate('Classes' as never)}
                 activeOpacity={0.9}
               >
@@ -343,30 +396,30 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               title: 'Turnos',
               subtitle: 'Reservá o reprogramá',
               icon: CalendarIcon,
-              color: themeColors.primary,
+              color: '#0d7fd4', // Azul primario ARJA
               onPress: () => navigation.navigate('Turnos'),
             },
             {
               title: 'Clases',
               subtitle: 'Cupos y agenda',
               icon: CoursesIcon,
-              color: themeColors.secondary || themeColors.primary,
+              color: '#13b5cf', // Cyan primario ARJA
               onPress: () => navigation.navigate('Classes' as never),
             },
             {
               title: 'Rutinas',
               subtitle: 'Tu plan diario',
               icon: RoutinesIcon,
-              color: '#f59e0b',
+              color: '#f59e0b', // Naranja/warning ARJA
               onPress: () => navigation.navigate('Rutinas'),
               hidden: !(featureFlags.routines && (tenantFeatures?.has_routines ?? true)),
             },
             {
-              title: 'Membresía',
+              title: 'Plan',
               subtitle: membership ? 'Activa' : 'Sin membresía',
               icon: CreditCardIcon,
-              color: '#13b5cf',
-              onPress: () => navigation.navigate('Memberships'),
+              color: '#34d399', // Verde/success ARJA
+              onPress: () => navigation.navigate('Membresías' as never),
               hidden: !(tenantFeatures?.has_memberships ?? true),
             },
           ]
@@ -374,65 +427,53 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             .map((item, idx) => (
               <TouchableOpacity
                 key={idx}
-                style={[styles.quickButton, { borderColor: `${item.color}30` }]}
+                style={[styles.quickButton, isDarkMode && styles.quickButtonDark, { borderColor: `${item.color}30` }]}
                 activeOpacity={0.9}
                 onPress={item.onPress}
               >
-                <View style={styles.quickButtonLeft}>
-                  <View style={[styles.quickIcon, { backgroundColor: `${item.color}15` }]}>
-                    <item.icon size={22} color={item.color} />
-                  </View>
-                  <View style={styles.quickTextCol}>
-                    <Text style={styles.quickTitle}>{item.title}</Text>
-                    <Text style={styles.quickSubtitle}>{item.subtitle}</Text>
-                  </View>
+                <View style={[styles.quickIcon, { backgroundColor: `${item.color}15` }]}>
+                  <item.icon size={24} color={item.color} />
                 </View>
-                <Text style={[styles.quickCta, { color: item.color }]}>Ir</Text>
+                <Text style={[styles.quickCta, { color: item.color, marginTop: 8 }]} numberOfLines={1}>{item.title}</Text>
               </TouchableOpacity>
             ))}
         </View>
 
-        {/* En progreso */}
+        {/* Actividades */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>En progreso</Text>
-            <Text style={styles.sectionCounter}>6</Text>
+            <Text style={[styles.sectionTitle, isDarkMode && styles.sectionTitleDark]}>Actividades</Text>
+            <Text style={[styles.sectionCounter, isDarkMode && styles.sectionCounterDark]}>6</Text>
           </View>
           <View style={styles.cardsRow}>
-            <View style={[styles.progressCard, { backgroundColor: '#e7f1ff' }]}>
-              <Text style={styles.cardOverline}>Rutina</Text>
-              <Text style={styles.cardTitle}>
+            <View style={[styles.progressCard, isDarkMode && styles.progressCardDark, { backgroundColor: isDarkMode ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)' }]}>
+              <Text style={[styles.cardOverline, isDarkMode && styles.cardOverlineDark]}>Rutina</Text>
+              <Text style={[styles.cardTitle, isDarkMode && styles.cardTitleDark]}>
                 {routine ? routine.name : 'Sin rutina asignada'}
               </Text>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressBarFill, { width: routine ? '60%' : '10%' }]} />
-              </View>
             </View>
-            <View style={[styles.progressCard, { backgroundColor: '#ffe8e0' }]}>
-              <Text style={styles.cardOverline}>Clases</Text>
-              <Text style={styles.cardTitle}>
+            <View style={[styles.progressCard, isDarkMode && styles.progressCardDark, { backgroundColor: isDarkMode ? 'rgba(19, 181, 207, 0.15)' : 'rgba(19, 181, 207, 0.1)' }]}>
+              <Text style={[styles.cardOverline, isDarkMode && styles.cardOverlineDark]}>Clases</Text>
+              <Text style={[styles.cardTitle, isDarkMode && styles.cardTitleDark]}>
                 {nextClass?.session
                   ? `${nextClass.session.series_name || 'Clase'} · ${formatDate(nextClass.session.starts_at)}`
                   : 'Sin clases reservadas'}
               </Text>
-              <View style={[styles.progressBar, { backgroundColor: '#ffd6cb' }]}>
-                <View style={[styles.progressBarFill, { width: nextClass ? '40%' : '10%', backgroundColor: '#ff9470' }]} />
-              </View>
             </View>
           </View>
         </View>
 
-        {/* Grupos */}
+        {/* Resumen */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Grupos de tareas</Text>
-            <Text style={styles.sectionCounter}>4</Text>
+            <Text style={[styles.sectionTitle, isDarkMode && styles.sectionTitleDark]}>Resumen</Text>
+            <Text style={[styles.sectionCounter, isDarkMode && styles.sectionCounterDark]}>4</Text>
           </View>
           {[
             {
               title: 'Turnos próximos',
               tasks: nextAppointment ? formatDate(nextAppointment.starts_at) : 'Sin turnos reservados',
-              color: '#7b4bff',
+              color: '#0d7fd4', // Azul primario ARJA
               progress: appointmentsCount,
             },
             {
@@ -441,32 +482,32 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               classSeriesGroups[0]
                 ? `${classSeriesGroups[0].name} · ${classSeriesGroups[0].days.join(' ')} ${classSeriesGroups[0].time}`
                 : 'Sin clases',
-              color: '#ff5fa2',
+              color: '#13b5cf', // Cyan primario ARJA
               progress: classesCount,
             },
             {
               title: 'Rutina del día',
               tasks: routine ? routine.name : 'Asigná una rutina',
-              color: '#f7a531',
+              color: '#f59e0b', // Naranja/warning ARJA
               progress: routine ? 1 : 0,
             },
             {
               title: 'Membresía',
               tasks: membership ? `Activa · ${membership.plan?.name || ''}` : 'Sin membresía',
-              color: '#13b5cf',
+              color: '#34d399', // Verde/success ARJA
               progress: membership ? 'Activa' : 'Sin',
             },
           ].map((item, idx) => (
-            <View key={idx} style={styles.groupCard}>
+            <View key={idx} style={[styles.groupCard, isDarkMode && styles.groupCardDark]}>
               <View style={[styles.groupIcon, { backgroundColor: `${item.color}20` }]}>
                 <Text style={[styles.groupIconText, { color: item.color }]}>•</Text>
               </View>
               <View style={styles.groupText}>
-                <Text style={styles.groupTitle}>{item.title}</Text>
-                <Text style={styles.groupSubtitle}>{item.tasks}</Text>
+                <Text style={[styles.groupTitle, isDarkMode && styles.groupTitleDark]}>{item.title}</Text>
+                <Text style={[styles.groupSubtitle, isDarkMode && styles.groupSubtitleDark]}>{item.tasks}</Text>
               </View>
-              <View style={[styles.badge, { borderColor: item.color }]}>
-                <Text style={[styles.badgeText, { color: item.color }]}>{item.progress}</Text>
+              <View style={[styles.badge, isDarkMode && styles.badgeDark, { borderColor: item.color }]}>
+                <Text style={[styles.badgeText, { color: item.color }]}>{typeof item.progress === 'number' ? item.progress : item.progress}</Text>
               </View>
             </View>
           ))}
@@ -506,6 +547,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  screenDark: {
+    backgroundColor: '#0e1c2c',
+  },
   scroll: {
     flex: 1,
   },
@@ -513,12 +557,13 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   hero: {
-    // Más espacio superior para evitar solaparse con la isla dinámica/notch
-    paddingTop: Platform.OS === 'ios' ? 88 : (StatusBar.currentHeight || 40) + 16,
+    // Espacio superior reducido
+    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 40) + 8,
     paddingBottom: 24,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+    backgroundColor: '#0d7fd4', // Fondo sólido para mejor contraste
   },
   heroTop: {
     flexDirection: 'row',
@@ -552,13 +597,30 @@ const styles = StyleSheet.create({
   greeting: {
     color: '#ffffff',
     fontSize: 14,
-    opacity: 0.9,
+    fontWeight: '600',
+    opacity: 1,
   },
   userName: {
     color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
     marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notifBadge: {
     width: 40,
@@ -594,117 +656,74 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    minHeight: 70,
+    justifyContent: 'center',
+    minHeight: 90,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  quickButtonLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
+  quickButtonDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   quickIcon: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quickTextCol: {
-    flex: 1,
-    minWidth: 0, // permite truncar adecuadamente en iOS/Android
-  },
-  quickTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-    flexShrink: 1,
-    flexWrap: 'wrap',
-  },
-  quickSubtitle: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginTop: 2,
-    flexShrink: 1,
-    flexWrap: 'wrap',
-  },
   quickCta: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    flexShrink: 0,
+    textAlign: 'center',
   },
-  taskTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  taskSubtitle: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  taskRow: {
+  taskHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
+  taskHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  taskLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  taskTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  taskSubtitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   taskButton: {
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 10,
+    minWidth: 70,
+    alignItems: 'center',
   },
   taskButtonText: {
-    color: '#5a3ef2',
+    color: '#0d7fd4',
     fontWeight: '700',
-  },
-  progressOuter: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    borderWidth: 8,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressInner: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressText: {
-    color: '#5a3ef2',
-    fontWeight: '800',
-  },
-  moreBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  moreBtnText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: -2,
+    fontSize: 14,
   },
   sectionBlock: {
     paddingHorizontal: 20,
@@ -720,6 +739,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#1a1a1a',
+  },
+  sectionTitleDark: {
+    color: '#ffffff',
   },
   stackCards: {
     gap: 10,
@@ -738,6 +760,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
+  },
+  stackCardDark: {
+    backgroundColor: '#1e2f3f',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   stackLeft: {
     flexDirection: 'row',
@@ -762,10 +788,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
+  stackTitleDark: {
+    color: '#ffffff',
+  },
   stackSubtitle: {
     fontSize: 13,
     color: '#6b7280',
     marginTop: 2,
+  },
+  stackSubtitleDark: {
+    color: '#90acbc',
   },
   stackCta: {
     paddingHorizontal: 14,
@@ -780,11 +812,15 @@ const styles = StyleSheet.create({
   sectionCounter: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#7b4bff',
-    backgroundColor: '#f0eaff',
+    color: '#0d7fd4',
+    backgroundColor: 'rgba(13, 127, 212, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
+  },
+  sectionCounterDark: {
+    color: '#4FD4E4',
+    backgroundColor: 'rgba(79, 212, 228, 0.15)',
   },
   cardsRow: {
     flexDirection: 'row',
@@ -800,16 +836,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
+  progressCardDark: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
   cardOverline: {
     fontSize: 11,
     color: '#6c7a92',
     marginBottom: 6,
+  },
+  cardOverlineDark: {
+    color: '#90acbc',
   },
   cardTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#1f2a44',
     marginBottom: 10,
+  },
+  cardTitleDark: {
+    color: '#ffffff',
   },
   progressBar: {
     height: 6,
@@ -836,6 +882,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
+  groupCardDark: {
+    backgroundColor: '#1e2f3f',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
   groupIcon: {
     width: 36,
     height: 36,
@@ -856,10 +907,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a1a',
   },
+  groupTitleDark: {
+    color: '#ffffff',
+  },
   groupSubtitle: {
     fontSize: 12,
     color: '#7a8699',
     marginTop: 2,
+  },
+  groupSubtitleDark: {
+    color: '#90acbc',
   },
   badge: {
     borderWidth: 2,
@@ -868,6 +925,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     minWidth: 52,
     alignItems: 'center',
+  },
+  badgeDark: {
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   badgeText: {
     fontSize: 12,

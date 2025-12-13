@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { CreditCardIcon, CalendarIcon } from '../components/Icons';
 import { membershipsAPI, MembershipPlan, MembershipSubscription } from '../api/memberships';
 import { format, parseISO, addMonths, differenceInDays, isAfter } from 'date-fns';

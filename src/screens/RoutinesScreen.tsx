@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { RoutinesIcon, PlusIcon, DumbbellIcon, ClockIcon, EditIcon, TrashIcon, VideoIcon } from '../components/Icons';
 import { routinesAPI, Routine } from '../api/routines';
 import { workoutRoutinesAPI, WorkoutRoutine } from '../api/workoutRoutines';

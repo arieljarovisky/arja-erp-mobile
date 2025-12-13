@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { workoutRoutinesAPI, WorkoutRoutine, Exercise } from '../api/workoutRoutines';
 import { DumbbellIcon, ClockIcon, AIIcon, FlameIcon, LightbulbIcon, MeditationIcon, TrashIcon } from '../components/Icons';
 import { format } from 'date-fns';

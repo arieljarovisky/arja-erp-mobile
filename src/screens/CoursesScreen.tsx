@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { ClassesIcon, CalendarIcon, PlusIcon, CoursesIcon } from '../components/Icons';
 import { classesAPI, ClassEnrollment, ClassSession } from '../api/classes';
 import { format, parseISO, isPast, isFuture, differenceInHours } from 'date-fns';

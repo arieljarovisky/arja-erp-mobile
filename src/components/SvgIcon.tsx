@@ -118,10 +118,21 @@ export const SvgIcon: React.FC<SvgIconProps> = ({
   }
 
   const [x, y, width, height] = parsed.viewBox.split(' ').map(Number);
+  
+  // Si el style tiene width y height específicos, usarlos; si no, usar size
+  const containerWidth = style?.width || size;
+  const containerHeight = style?.height || size;
+  
+  // Calcular el aspect ratio del viewBox para mantener las proporciones
+  const aspectRatio = width / height;
+  const finalWidth = containerWidth;
+  const finalHeight = containerHeight;
+  // Ajustar el viewBox si el contenedor tiene un aspect ratio diferente
+  const adjustedViewBox = parsed.viewBox;
 
   return (
-    <View style={[{ width: size, height: size }, style]}>
-      <Svg width={size} height={size} viewBox={parsed.viewBox}>
+    <View style={[{ width: containerWidth, height: containerHeight }, style]}>
+      <Svg width={finalWidth} height={finalHeight} viewBox={adjustedViewBox} preserveAspectRatio="xMidYMid meet">
         {parsed.elements.map((element, index) => {
           if (element.type === 'path') {
             return (

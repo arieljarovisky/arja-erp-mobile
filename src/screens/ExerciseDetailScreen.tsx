@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
 import { DumbbellIcon, ClockIcon, LightbulbIcon } from '../components/Icons';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale/es';

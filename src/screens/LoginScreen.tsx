@@ -20,11 +20,11 @@ import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/useAuthStore';
 import { ArjaLogo } from '../components/ArjaLogo';
-import { useAppTheme } from '../utils/useAppTheme';
+import { useAppTheme } from '../store/useThemeStore';
+import apiClient from '../api/client';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
-const API_BASE_URL = 'https://backend-production-1042.up.railway.app';
 
 interface LoginScreenProps {
   navigation: any;
@@ -38,7 +38,41 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
   // Listener para deep links de OAuth
   React.useEffect(() => {
-    // Verificar si la app se abrió con un deep link
+    // En web, verificar si hay un código OAuth en la URL después de la redirección
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const error = urlParams.get('error');
+      
+      if (code || error) {
+        console.log('[LoginScreen] Código OAuth encontrado en URL (web):', code ? code.substring(0, 20) + '...' : 'NO');
+        console.log('[LoginScreen] Error OAuth encontrado en URL (web):', error || 'NINGUNO');
+        
+        // Limpiar la URL para evitar que se procese de nuevo
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Establecer loading para mostrar el indicador mientras se procesa
+        setOAuthLoading(true);
+        
+        if (error) {
+          Alert.alert('Error de Autenticación', 'Error al autenticarse con Google');
+          setOAuthLoading(false);
+          return;
+        }
+        
+        if (code) {
+          const redirectUri = getRedirectUri();
+          exchangeCodeForCustomerData(code, redirectUri).finally(() => {
+            setOAuthLoading(false);
+          });
+        } else {
+          setOAuthLoading(false);
+        }
+        return;
+      }
+    }
+
+    // Verificar si la app se abrió con un deep link (móvil)
     Linking.getInitialURL().then((url) => {
       if (url) {
         console.log('[LoginScreen] App abierta con deep link:', url);
@@ -88,7 +122,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
   // Obtener el redirect URI para OAuth
   const getRedirectUri = () => {
-    return `${API_BASE_URL}/api/public/customer/oauth/google/callback`;
+    const baseURL = apiClient.defaults.baseURL || 'https://backend-production-1042.up.railway.app';
+    return `${baseURL}/api/public/customer/oauth/google/callback`;
   };
 
   // Manejar login con Google OAuth
@@ -96,27 +131,38 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setOAuthLoading(true);
     try {
       const redirectUri = getRedirectUri();
-      const appDeepLink = 'arja-erp://oauth/callback';
+      // En web, usar la URL actual como callback; en móvil, usar el deep link
+      const appDeepLink = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? `${window.location.origin}${window.location.pathname}`
+        : 'arja-erp://oauth/callback';
       
       // Obtener la URL de autorización del backend
-      const authUrlResponse = await fetch(
-        `${API_BASE_URL}/api/public/customer/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}&app_deep_link=${encodeURIComponent(appDeepLink)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+      const authUrlResponse = await apiClient.get(
+        `/api/public/customer/oauth/google?redirect_uri=${encodeURIComponent(redirectUri)}&app_deep_link=${encodeURIComponent(appDeepLink)}`
       );
 
-      const authUrlData = await authUrlResponse.json();
+      const authUrlData = authUrlResponse.data;
 
       if (!authUrlData.ok || !authUrlData.authUrl) {
         Alert.alert('Error', authUrlData.error || 'Error al iniciar autenticación');
         return;
       }
 
-      // Abrir el navegador para autenticación
+      // En web, usar redirección completa en lugar de popup para evitar problemas con COOP
+      if (Platform.OS === 'web') {
+        // Guardar el estado en localStorage para recuperarlo después de la redirección
+        if (typeof window !== 'undefined') {
+          console.log('[LoginScreen] Redirigiendo a Google OAuth (web):', authUrlData.authUrl);
+          // No hacer return aquí, dejar que setOAuthLoading se ejecute después
+          // La redirección completa reiniciará la app y el useEffect procesará el código
+          setTimeout(() => {
+            window.location.href = authUrlData.authUrl;
+          }, 100);
+        }
+        return;
+      }
+
+      // En móvil, usar el método normal con popup
       const result = await WebBrowser.openAuthSessionAsync(
         authUrlData.authUrl,
         appDeepLink
@@ -162,6 +208,39 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       }
     } catch (error: any) {
       console.error('Error en OAuth:', error);
+      
+      // Manejar diferentes tipos de errores
+      if (error?.response?.status === 503) {
+        Alert.alert(
+          'Servidor no disponible',
+          'El servidor está temporalmente no disponible. Por favor, intenta de nuevo en unos momentos.',
+          [{ text: 'OK' }]
+        );
+      } else if (error?.response?.status >= 500) {
+        Alert.alert(
+          'Error del servidor',
+          'Hubo un problema con el servidor. Por favor, intenta de nuevo más tarde.',
+          [{ text: 'OK' }]
+        );
+      } else if (error?.response?.status === 404) {
+        Alert.alert(
+          'Endpoint no encontrado',
+          'El servicio de autenticación no está disponible. Contacta al soporte.',
+          [{ text: 'OK' }]
+        );
+      } else if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Network Error')) {
+        Alert.alert(
+          'Error de conexión',
+          'No se pudo conectar con el servidor. Verifica tu conexión a internet.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Error de autenticación',
+          error?.response?.data?.error || error?.message || 'Error al iniciar sesión con Google',
+          [{ text: 'OK' }]
+        );
+      }
       Alert.alert('Error', 'Error al iniciar sesión con Google');
     } finally {
       setOAuthLoading(false);
@@ -173,22 +252,16 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setLoading(true);
     try {
       console.log('[LoginScreen] Llamando a exchange-code con:', { code: code.substring(0, 20) + '...', redirectUri });
-      const response = await fetch(
-        `${API_BASE_URL}/api/public/customer/oauth/exchange-code`,
+      const response = await apiClient.post(
+        '/api/public/customer/oauth/exchange-code',
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            code,
-            redirect_uri: redirectUri,
-          }),
+          code,
+          redirect_uri: redirectUri,
         }
       );
 
       console.log('[LoginScreen] Respuesta de exchange-code recibida, status:', response.status);
-      const data = await response.json();
+      const data = response.data;
       console.log('[LoginScreen] Datos recibidos de exchange-code:', JSON.stringify(data, null, 2));
 
       if (!data.ok) {
@@ -203,6 +276,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           tenantId: data.data.tenant_id,
           customerName: data.data.name || null,
           phone: data.data.phone || null,
+          email: data.data.email || null,
+          picture: data.data.picture || null,
         };
 
         // Guardar el token si viene en la respuesta
