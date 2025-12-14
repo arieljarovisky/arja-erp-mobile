@@ -48,6 +48,12 @@ export default function ExerciseDetailScreen() {
     routineName: string;
   };
 
+  // Debug: Log del ejercicio recibido
+  React.useEffect(() => {
+    console.log('[ExerciseDetail] Ejercicio recibido:', JSON.stringify(exercise, null, 2));
+    console.log('[ExerciseDetail] video_url:', exercise.video_url);
+  }, [exercise]);
+
   const handleSearchYouTube = () => {
     // Crear URL de búsqueda en YouTube
     const searchQuery = encodeURIComponent(`${exercise.name} ejercicio`);
@@ -113,33 +119,90 @@ export default function ExerciseDetailScreen() {
           )}
         </View>
 
-        {/* Botón de búsqueda en YouTube */}
-        <View style={[styles.section, isDarkMode && styles.sectionDark]}>
-          <Text style={[styles.sectionTitle, isDarkMode && styles.sectionTitleDark]}>
-            Ver tutorial en YouTube
-          </Text>
-          <TouchableOpacity
-            style={[styles.youtubeButton, isDarkMode && styles.youtubeButtonDark]}
-            onPress={handleSearchYouTube}
-            activeOpacity={0.8}
-          >
-            <View style={styles.youtubeButtonContent}>
-              <View style={styles.youtubeIconContainer}>
-                <View style={styles.youtubePlayIcon}>
-                  <View style={styles.youtubePlayTriangle} />
+        {/* Video del ejercicio */}
+        {exercise.video_url && (
+          <View style={[styles.section, isDarkMode && styles.sectionDark]}>
+            <Text style={[styles.sectionTitle, isDarkMode && styles.sectionTitleDark]}>
+              Video del ejercicio
+            </Text>
+            <TouchableOpacity
+              style={[styles.videoButton, isDarkMode && styles.videoButtonDark]}
+              onPress={() => {
+                let videoUrl = exercise.video_url!;
+                
+                // Si es YouTube, asegurar que sea una URL válida
+                if (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be')) {
+                  // Convertir youtu.be a formato watch si es necesario
+                  if (videoUrl.includes('youtu.be/')) {
+                    const videoId = videoUrl.split('youtu.be/')[1]?.split('?')[0];
+                    videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+                  }
+                  // Si ya es embed, convertir a watch
+                  if (videoUrl.includes('youtube.com/embed/')) {
+                    const videoId = videoUrl.split('embed/')[1]?.split('?')[0];
+                    videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+                  }
+                }
+                
+                Linking.openURL(videoUrl).catch(err => {
+                  console.error('[ExerciseDetail] Error abriendo video:', err);
+                  Alert.alert('Error', 'No se pudo abrir el video');
+                });
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.videoButtonContent}>
+                <View style={styles.videoIconContainer}>
+                  <View style={styles.videoPlayIcon}>
+                    <View style={styles.videoPlayTriangle} />
+                  </View>
+                </View>
+                <View style={styles.videoButtonTextContainer}>
+                  <Text style={[styles.videoButtonText, isDarkMode && styles.videoButtonTextDark]}>
+                    {exercise.video_url.includes('youtube.com') || exercise.video_url.includes('youtu.be') 
+                      ? 'Ver en YouTube' 
+                      : 'Ver video'}
+                  </Text>
+                  <Text style={[styles.videoButtonSubtext, isDarkMode && styles.videoButtonSubtextDark]}>
+                    {exercise.video_url.includes('youtube.com') || exercise.video_url.includes('youtu.be')
+                      ? 'Abrir en la app de YouTube'
+                      : 'Abrir en el navegador'}
+                  </Text>
                 </View>
               </View>
-              <View style={styles.youtubeButtonTextContainer}>
-                <Text style={styles.youtubeButtonText}>
-                  Ver en YouTube
-                </Text>
-                <Text style={styles.youtubeButtonSubtext}>
-                  Buscar "{exercise.name}"
-                </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Botón de búsqueda en YouTube (solo si no hay video_url) */}
+        {!exercise.video_url && (
+          <View style={[styles.section, isDarkMode && styles.sectionDark]}>
+            <Text style={[styles.sectionTitle, isDarkMode && styles.sectionTitleDark]}>
+              Ver tutorial en YouTube
+            </Text>
+            <TouchableOpacity
+              style={[styles.youtubeButton, isDarkMode && styles.youtubeButtonDark]}
+              onPress={handleSearchYouTube}
+              activeOpacity={0.8}
+            >
+              <View style={styles.youtubeButtonContent}>
+                <View style={styles.youtubeIconContainer}>
+                  <View style={styles.youtubePlayIcon}>
+                    <View style={styles.youtubePlayTriangle} />
+                  </View>
+                </View>
+                <View style={styles.youtubeButtonTextContainer}>
+                  <Text style={styles.youtubeButtonText}>
+                    Ver en YouTube
+                  </Text>
+                  <Text style={styles.youtubeButtonSubtext}>
+                    Buscar "{exercise.name}"
+                  </Text>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Estadísticas */}
         <View style={[styles.section, isDarkMode && styles.sectionDark]}>
@@ -392,25 +455,76 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   videoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 16,
-    backgroundColor: '#e0f7fa',
-    borderRadius: 12,
-    marginTop: 12,
+    backgroundColor: ARJA_PRIMARY_START,
+    borderRadius: 16,
+    padding: 0,
+    overflow: 'hidden',
+    marginTop: 8,
+    shadowColor: ARJA_PRIMARY_START,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 0,
   },
   videoButtonDark: {
-    backgroundColor: '#1e3a5f',
+    backgroundColor: ARJA_PRIMARY_START,
+    shadowColor: ARJA_PRIMARY_START,
+    shadowOpacity: 0.4,
+  },
+  videoButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  videoIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPlayIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPlayTriangle: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 12,
+    borderRightWidth: 0,
+    borderTopWidth: 7,
+    borderBottomWidth: 7,
+    borderLeftColor: ARJA_PRIMARY_START,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderRightColor: 'transparent',
+    marginLeft: 2,
+  },
+  videoButtonTextContainer: {
+    flex: 1,
+    gap: 4,
   },
   videoButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: ARJA_PRIMARY_START,
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  videoButtonTextDark: {
-    color: '#4FD4E4',
+  videoButtonSubtext: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  videoButtonSubtextDark: {
+    color: 'rgba(255, 255, 255, 0.9)',
   },
   sectionTitle: {
     fontSize: 18,

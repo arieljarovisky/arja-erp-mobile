@@ -197,6 +197,33 @@ export default function AppointmentsScreen() {
     );
   };
 
+  const handleDelete = (appt: Appointment) => {
+    Alert.alert(
+      'Eliminar turno',
+      `¿Querés eliminar este turno de ${appt.service_name || 'servicio'}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!tenantId || !customerId) {
+                Alert.alert('Error', 'Faltan datos para eliminar el turno');
+                return;
+              }
+              await appointmentsAPI.cancelAppointment(appt.id, tenantId, customerId);
+              await loadData();
+              Alert.alert('Éxito', 'Turno eliminado correctamente');
+            } catch (error: any) {
+              Alert.alert('Error', error?.response?.data?.error || 'No se pudo eliminar el turno');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderCard = (appt: Appointment) => {
     const status = appt.status || 'scheduled';
     const statusColor = STATUS_COLORS[status] || '#7b4bff';

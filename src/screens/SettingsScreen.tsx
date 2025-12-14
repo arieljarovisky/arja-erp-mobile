@@ -22,6 +22,7 @@ import { useAppTheme } from '../store/useThemeStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useTenantStore } from '../store/useTenantStore';
 import { appSettingsAPI } from '../api/appSettings';
+import apiClient from '../api/client';
 import { registerForPushNotifications } from '../services/pushNotifications';
 import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
@@ -61,12 +62,29 @@ export default function SettingsScreen() {
   const [updatingPicture, setUpdatingPicture] = useState(false);
   const [showPictureInput, setShowPictureInput] = useState(false);
   const [pictureUrl, setPictureUrl] = useState('');
+  const [showTenantCodeInput, setShowTenantCodeInput] = useState(false);
+  const [tenantCode, setTenantCode] = useState('');
+  const [changingTenantCode, setChangingTenantCode] = useState(false);
 
   useEffect(() => {
     checkPushStatus();
     loadTenantName();
+    loadTenantCode();
     setLoading(false);
   }, [tenantId]);
+
+  const loadTenantCode = async () => {
+    if (!tenantId) return;
+    try {
+      // Obtener información del tenant desde el API
+      const response = await apiClient.get(`/api/public/customer/tenant/${tenantId}`);
+      if (response.data?.ok && response.data?.data?.subdomain) {
+        setTenantCode(response.data.data.subdomain);
+      }
+    } catch (error) {
+      console.error('[SettingsScreen] Error cargando código del negocio:', error);
+    }
+  };
 
   const loadTenantName = async () => {
     if (!tenantId) return;
@@ -173,18 +191,44 @@ export default function SettingsScreen() {
   };
 
   const handleChangeTenant = () => {
-    Alert.alert(
-      'Cambiar de negocio',
-      'Para cambiar de negocio, necesitas cerrar sesión e iniciar sesión con otra cuenta.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Cerrar sesión', 
-          style: 'destructive',
-          onPress: handleLogout 
+    setShowTenantCodeInput(true);
+  };
+
+  const handleSaveTenantCode = async () => {
+    if (!tenantCode.trim()) {
+      Alert.alert('Error', 'Por favor ingresá un código de negocio');
+      return;
+    }
+
+    // Validar formato
+    const codeRegex = /^[a-z0-9-]{3,}$/;
+    const normalizedCode = tenantCode.trim().toLowerCase();
+    
+    if (!codeRegex.test(normalizedCode)) {
+      Alert.alert('Error', 'El código solo puede contener letras, números y guiones, y debe tener al menos 3 caracteres');
+      return;
+    }
+
+    setChangingTenantCode(true);
+    try {
+      await appSettingsAPI.updateTenantCode(normalizedCode);
+      Alert.alert('Éxito', 'Código del negocio actualizado correctamente', [
+        {
+          text: 'OK',
+          onPress: () => {
+            setShowTenantCodeInput(false);
+            // Recargar datos del tenant
+            loadTenantName();
+            loadTenantCode();
+          },
         },
-      ]
-    );
+      ]);
+    } catch (error: any) {
+      console.error('[SettingsScreen] Error actualizando código del negocio:', error);
+      Alert.alert('Error', error.message || 'Error al actualizar el código del negocio');
+    } finally {
+      setChangingTenantCode(false);
+    }
   };
 
   const handleLogout = () => {
@@ -518,14 +562,81 @@ export default function SettingsScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity 
-              style={[styles.cardRow, styles.cardRowBorder, styles.cardRowButton]}
-              onPress={handleChangeTenant}
-            >
-              <Text style={[styles.cardButtonText, { color: ARJA_PRIMARY_START }]}>
-                Cambiar de negocio
-              </Text>
-            </TouchableOpacity>
+            
+            {!showTenantCodeInput ? (
+              <>
+                <View style={[styles.cardRow, styles.cardRowBorder]}>
+                  <View style={styles.cardRowLeft}>
+                    <View style={styles.cardRowText}>
+                      <Text style={[styles.cardLabel, isDarkMode && styles.cardLabelDark]}>Código del negocio</Text>
+                      <Text style={[styles.cardValue, isDarkMode && styles.cardValueDark]}>
+                        {tenantCode || 'No configurado'}
+                      </Text>
+                      <Text style={[styles.cardSubtext, isDarkMode && styles.cardSubtextDark]}>
+                        Este código se usa para acceder a tu negocio desde la app móvil
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.cardRow, styles.cardRowBorder, styles.cardRowButton]}
+                  onPress={handleChangeTenant}
+                >
+                  <Text style={[styles.cardButtonText, { color: ARJA_PRIMARY_START }]}>
+                    Cambiar código del negocio
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={[styles.cardRow, styles.cardRowBorder]}>
+                <View style={{ width: '100%' }}>
+                  <Text style={[styles.cardLabel, isDarkMode && styles.cardLabelDark, { marginBottom: 8 }]}>
+                    Código del negocio
+                  </Text>
+                  <TextInput
+                    style={[styles.textInput, isDarkMode && styles.textInputDark]}
+                    placeholder="codigo-negocio"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    value={tenantCode}
+                    onChangeText={(text) => {
+                      // Solo permitir letras, números y guiones
+                      const normalized = text.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
+                      setTenantCode(normalized);
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!changingTenantCode}
+                  />
+                  <Text style={[styles.cardSubtext, isDarkMode && styles.cardSubtextDark, { marginTop: 4 }]}>
+                    Solo letras, números y guiones. Mínimo 3 caracteres.
+                  </Text>
+                  <View style={styles.inputButtons}>
+                    <TouchableOpacity
+                      style={[styles.inputButton, styles.inputButtonCancel]}
+                      onPress={() => {
+                        setShowTenantCodeInput(false);
+                        // Restaurar valor original
+                        loadTenantCode();
+                      }}
+                      disabled={changingTenantCode}
+                    >
+                      <Text style={styles.inputButtonText}>Cancelar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.inputButton, styles.inputButtonSave]}
+                      onPress={handleSaveTenantCode}
+                      disabled={changingTenantCode}
+                    >
+                      {changingTenantCode ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <Text style={[styles.inputButtonText, { color: '#ffffff' }]}>Guardar</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         </View>
 

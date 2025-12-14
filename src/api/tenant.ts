@@ -54,5 +54,16 @@ export const tenantAPI = {
     const response = await apiClient.get(`/api/tenants/${tenantId}`);
     return response.data;
   },
+
+  /**
+   * Obtener información del tenant por código (ID o subdomain)
+   */
+  getTenantByCode: async (code: string): Promise<any> => {
+    const response = await apiClient.get(`/api/public/customer/tenant/${code}`);
+    if (response.data?.ok && response.data?.data) {
+      return response.data.data;
+    }
+    return response.data;
+  },
 };
 

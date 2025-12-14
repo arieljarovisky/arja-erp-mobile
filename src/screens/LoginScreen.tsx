@@ -251,6 +251,10 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const exchangeCodeForCustomerData = async (code: string, redirectUri: string) => {
     setLoading(true);
     try {
+      // Guardar el código OAuth y redirect_uri por si el usuario necesita seleccionar un tenant
+      await AsyncStorage.setItem('oauth_code', code);
+      await AsyncStorage.setItem('oauth_redirect_uri', redirectUri);
+      
       console.log('[LoginScreen] Llamando a exchange-code con:', { code: code.substring(0, 20) + '...', redirectUri });
       const response = await apiClient.post(
         '/api/public/customer/oauth/exchange-code',
@@ -264,16 +268,46 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       const data = response.data;
       console.log('[LoginScreen] Datos recibidos de exchange-code:', JSON.stringify(data, null, 2));
 
+      // Si el backend indica que necesita selección de tenant (usuario nuevo)
+      if (!data.ok && data.needsTenantSelection) {
+        console.log('[LoginScreen] Usuario nuevo detectado, necesita seleccionar negocio');
+        console.log('[LoginScreen] Email:', data.email, 'Name:', data.name);
+        // Guardar datos del usuario sin tenant_id para que pueda seleccionar el negocio
+        // Nota: El backend no devuelve customer_id aún, solo email y name
+        // Usamos customerId = 0 como marcador temporal para indicar que está pendiente de selección
+        await AsyncStorage.setItem('pending_user_email', data.email || '');
+        await AsyncStorage.setItem('pending_user_name', data.name || '');
+        // El código OAuth y redirect_uri ya están guardados arriba
+        // Marcar como autenticado pero sin tenant_id para que AppNavigator muestre SelectTenantScreen
+        const pendingAuthData = {
+          customerId: 0, // Temporal, se actualizará cuando se seleccione el tenant
+          tenantId: null,
+          customerName: data.name || null,
+          phone: null,
+          email: data.email || null,
+          picture: null,
+        };
+        console.log('[LoginScreen] Llamando a setAuth con datos pendientes:', pendingAuthData);
+        setAuth(pendingAuthData);
+        console.log('[LoginScreen] setAuth completado, el AppNavigator debería mostrar SelectTenantScreen');
+        // La navegación se manejará automáticamente por el AppNavigator
+        setLoading(false);
+        return;
+      }
+      
+      // Si llegamos aquí, el usuario se autenticó correctamente, limpiar código OAuth guardado
+      await AsyncStorage.multiRemove(['oauth_code', 'oauth_redirect_uri', 'pending_user_email', 'pending_user_name']);
+
       if (!data.ok) {
         Alert.alert('Error', data.error || 'Error al autenticarse');
         return;
       }
 
       // Si hay datos del cliente, guardarlos y navegar
-      if (data.data && data.data.tenant_id) {
+      if (data.data) {
         const customerData = {
           customerId: data.data.customer_id,
-          tenantId: data.data.tenant_id,
+          tenantId: data.data.tenant_id || null, // Permitir null para usuarios nuevos
           customerName: data.data.name || null,
           phone: data.data.phone || null,
           email: data.data.email || null,
@@ -294,10 +328,14 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         }
 
         setAuth(customerData);
+        // Limpiar código OAuth y datos pendientes después de autenticación exitosa
+        await AsyncStorage.multiRemove(['oauth_code', 'oauth_redirect_uri', 'pending_user_email', 'pending_user_name']);
         // La navegación se manejará automáticamente por el useEffect en AppNavigator
       }
     } catch (error: any) {
       console.error('Error intercambiando código:', error);
+      // Limpiar código OAuth en caso de error
+      await AsyncStorage.multiRemove(['oauth_code', 'oauth_redirect_uri', 'pending_user_email', 'pending_user_name']);
       Alert.alert('Error', 'Error al obtener datos del cliente');
     } finally {
       setLoading(false);

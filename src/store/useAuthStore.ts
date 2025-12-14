@@ -9,7 +9,7 @@ import { authService } from '../services/auth';
 // Tipo adaptado para el store
 export interface StoreAuthData {
   customerId: number;
-  tenantId: number;
+  tenantId?: number | null; // Opcional para permitir usuarios autenticados sin tenant
   customerName?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -27,6 +27,7 @@ interface AuthState {
   
   // Actions
   setAuth: (data: StoreAuthData) => void;
+  setTenantId: (tenantId: number) => void;
   clearAuth: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -42,10 +43,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   picture: null,
 
   setAuth: (data: StoreAuthData) => {
-    console.log('[AuthStore] setAuth llamado con:', { customerId: data.customerId, tenantId: data.tenantId });
+    console.log('[AuthStore] ═══════════════════════════════════════');
+    console.log('[AuthStore] setAuth llamado con:', { 
+      customerId: data.customerId, 
+      tenantId: data.tenantId,
+      email: data.email,
+      customerName: data.customerName
+    });
     // Guardar en AsyncStorage manualmente
     AsyncStorage.setItem('customer_id', String(data.customerId || ''));
-    AsyncStorage.setItem('tenant_id', String(data.tenantId || ''));
+    if (data.tenantId) {
+      AsyncStorage.setItem('tenant_id', String(data.tenantId));
+    } else {
+      AsyncStorage.removeItem('tenant_id');
+    }
     if (data.customerName) {
       AsyncStorage.setItem('customer_name', data.customerName);
     }
@@ -60,16 +71,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     AsyncStorage.setItem('is_authenticated', 'true');
 
-      set({
+    set({
       isAuthenticated: Boolean(true),
       customerId: data.customerId,
-      tenantId: data.tenantId,
+      tenantId: data.tenantId || null,
       customerName: data.customerName || null,
       phone: data.phone || null,
       email: data.email || null,
       picture: data.picture || null,
     });
-    console.log('[AuthStore] Estado actualizado - isAuthenticated: true');
+    console.log('[AuthStore] Estado actualizado en store');
+    console.log('[AuthStore] isAuthenticated: true');
+    console.log('[AuthStore] customerId:', data.customerId);
+    console.log('[AuthStore] tenantId:', data.tenantId || 'null');
+    console.log('[AuthStore] email:', data.email || 'null');
+    console.log('[AuthStore] ═══════════════════════════════════════');
+  },
+
+  setTenantId: (tenantId: number) => {
+    console.log('[AuthStore] setTenantId llamado con:', tenantId);
+    AsyncStorage.setItem('tenant_id', String(tenantId));
+    set({ tenantId });
   },
 
   clearAuth: async () => {
@@ -103,10 +125,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const cId = customerId[1] ? parseInt(customerId[1], 10) : null;
       const tId = tenantId[1] ? parseInt(tenantId[1], 10) : null;
 
-      if (isAuthenticated && cId && tId) {
+      // Permitir autenticación con customerId pero sin tenantId (usuario nuevo)
+      // customerId puede ser 0 para usuarios pendientes de selección de tenant
+      if (isAuthenticated && (cId !== null || email[1])) {
+        // Si hay email pero no customerId, es un usuario pendiente
+        const finalCustomerId = cId !== null ? cId : 0;
         set({
           isAuthenticated: Boolean(true),
-          customerId: cId,
+          customerId: finalCustomerId,
           tenantId: tId,
           customerName: customerName[1] || null,
           phone: phone[1] || null,

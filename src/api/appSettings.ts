@@ -76,5 +76,12 @@ export const appSettingsAPI = {
       throw new Error(resp.data?.error || 'Error al actualizar foto de perfil');
     }
   },
+
+  updateTenantCode: async (subdomain: string): Promise<void> => {
+    const resp = await apiClient.put('/api/customers/app-settings/me/tenant-code', { subdomain });
+    if (!resp.data?.ok) {
+      throw new Error(resp.data?.error || 'Error al actualizar código del negocio');
+    }
+  },
 };
 

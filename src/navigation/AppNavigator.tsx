@@ -14,7 +14,7 @@ import { useTenantStore } from '../store/useTenantStore';
 import { useAppTheme } from '../store/useThemeStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useAppSettingsStore, selectPrimaryColor, selectFeatureFlags } from '../store/useAppSettingsStore';
-import { HomeIcon, BellIcon, QRCodeIcon, CalendarIcon, RoutinesIcon, CoursesIcon } from '../components/Icons';
+import { HomeIcon, BellIcon, QRCodeIcon, CalendarIcon, RoutinesIcon } from '../components/Icons';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
 // Screens
@@ -32,6 +32,7 @@ import ExerciseDetailScreen from '../screens/ExerciseDetailScreen';
 import CoursesScreen from '../screens/CoursesScreen';
 import AvailableClassesScreen from '../screens/AvailableClassesScreen';
 import TenantNotFoundScreen from '../screens/TenantNotFoundScreen';
+import SelectTenantScreen from '../screens/SelectTenantScreen';
 import PaymentSuccessScreen from '../screens/PaymentSuccessScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
@@ -129,7 +130,7 @@ function MainTabs() {
       name: 'Notificaciones',
       component: NotificationsStack,
       icon: BellIcon,
-      feature: featureFlags.notifications,
+      feature: true, // Siempre habilitado para tener 5 tabs
       filled: true,
     },
     {
@@ -137,14 +138,7 @@ function MainTabs() {
       name: 'Rutinas',
       component: RoutinesStack,
       icon: RoutinesIcon,
-      feature: tenantFeatures?.has_routines ?? false,
-    },
-    {
-      key: 'classes',
-      name: 'Clases',
-      component: ClassesStack,
-      icon: CoursesIcon,
-      feature: tenantFeatures?.has_classes ?? false,
+      feature: true, // Siempre habilitado para tener 5 tabs (2-1-2 con QR en el medio)
     },
     {
       key: 'appointments',
@@ -335,6 +329,25 @@ export default function AppNavigator() {
     );
   }
 
+  // Si el usuario está autenticado pero no tiene tenant_id, mostrar pantalla de selección
+  if (authStatus && !tenantId) {
+    console.log('[AppNavigator] ═══════════════════════════════════════');
+    console.log('[AppNavigator] Mostrando pantalla SelectTenant');
+    console.log('[AppNavigator] authStatus:', authStatus);
+    console.log('[AppNavigator] tenantId:', tenantId);
+    console.log('[AppNavigator] isAuthenticated:', isAuthenticated);
+    console.log('[AppNavigator] customerId:', useAuthStore.getState().customerId);
+    console.log('[AppNavigator] email:', useAuthStore.getState().email);
+    console.log('[AppNavigator] ═══════════════════════════════════════');
+    return (
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="SelectTenant" component={SelectTenantScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   // Si el tenant no existe y el usuario está autenticado, mostrar pantalla de error
   if (authStatus && tenantNotFound) {
     console.log('[AppNavigator] Mostrando pantalla TenantNotFound - authStatus:', authStatus, 'tenantNotFound:', tenantNotFound);
@@ -381,6 +394,13 @@ export default function AppNavigator() {
         }}
       />
       <Stack.Screen 
+        name="SelectTenant" 
+        component={SelectTenantScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
         name="TenantNotFound" 
         component={TenantNotFoundScreen}
         options={{ 
@@ -411,6 +431,13 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="WorkoutRoutineDetail" 
         component={WorkoutRoutineDetailScreen}
+        options={{ 
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="ExerciseDetail" 
+        component={ExerciseDetailScreen}
         options={{ 
           headerShown: false,
         }}
