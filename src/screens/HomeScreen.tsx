@@ -245,21 +245,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               <TouchableOpacity 
                 style={styles.notifBadge} 
                 activeOpacity={0.8}
-                onPress={() => {
-                  // Navegar al tab de Notificaciones usando el navegador padre (Tab Navigator)
-                  const tabNavigator = navigation.getParent()?.getParent();
-                  if (tabNavigator) {
-                    tabNavigator.navigate('Notificaciones' as never);
-                  } else {
-                    // Fallback: intentar con el padre directo
-                    const parent = navigation.getParent();
-                    if (parent) {
-                      parent.navigate('Notificaciones' as never);
-                    } else {
-                      navigation.navigate('Notificaciones' as never);
-                    }
-                  }
-                }}
+                onPress={() => navigation.navigate('Notificaciones' as never)}
               >
                 <BellIcon size={22} color="#ffffff" />
               </TouchableOpacity>

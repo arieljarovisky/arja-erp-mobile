@@ -26,7 +26,7 @@ import apiClient from '../api/client';
 import { registerForPushNotifications } from '../services/pushNotifications';
 import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
-import { BellIcon, UserIcon, BuildingIcon, LogOutIcon, MoonIcon, SunIcon, SettingsIcon, MailIcon, PhoneIcon, GoogleIcon, EditIcon } from '../components/Icons';
+import { BellIcon, UserIcon, BuildingIcon, LogOutIcon, MoonIcon, SunIcon, SettingsIcon, MailIcon, PhoneIcon, GoogleIcon, EditIcon, ChevronRightIcon, UsersIcon } from '../components/Icons';
 
 const ARJA_PRIMARY_START = '#13b5cf';
 const ARJA_PRIMARY_END = '#0d7fd4';
@@ -639,6 +639,8 @@ export default function SettingsScreen() {
             )}
           </View>
         </View>
+
+        
 
         {/* Cuentas Conectadas */}
         <View style={styles.section}>
